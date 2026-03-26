@@ -7,5 +7,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ projek
   if (!session) redirect("/login");
 
   const { projekt } = await params;
-  return <ProjectDetail projekt={projekt} />;
+  return (
+    <div className="h-screen overflow-hidden">
+      <ProjectDetail projekt={projekt} />
+    </div>
+  );
 }
