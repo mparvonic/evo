@@ -76,16 +76,33 @@ export default function SystemStats() {
           pct={data.cpu.pct}
           color={cpuColor}
         />
-        <StatCard
-          label="RAM"
-          value={`${data.ram.pct.toFixed(0)}%`}
-          sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
-          pct={data.ram.pct}
-          color={ramColor}
-        />
+        {/* Unified memory = RAM + GPU — zobraz jako jeden pool */}
+        {data.gpu ? (() => {
+          const totalUnified = data.ram.total + data.gpu.total;
+          const usedUnified = data.ram.used + data.gpu.used;
+          const pctUnified = Math.round(usedUnified / totalUnified * 100);
+          const color = pctUnified > 85 ? "bg-red-500" : pctUnified > 65 ? "bg-yellow-500" : "bg-blue-500";
+          return (
+            <StatCard
+              label="Unified Memory"
+              value={`${pctUnified}%`}
+              sub={`${fmt(usedUnified)} / ${fmt(totalUnified)}`}
+              pct={pctUnified}
+              color={color}
+            />
+          );
+        })() : (
+          <StatCard
+            label="RAM"
+            value={`${data.ram.pct.toFixed(0)}%`}
+            sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
+            pct={data.ram.pct}
+            color={ramColor}
+          />
+        )}
         {data.gpu ? (
           <StatCard
-            label="GPU mem"
+            label="GPU VRAM"
             value={`${data.gpu.pct}%`}
             sub={`${fmt(data.gpu.used)} / ${fmt(data.gpu.total)}`}
             pct={data.gpu.pct}
