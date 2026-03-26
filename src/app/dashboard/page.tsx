@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import ProjectList from "@/components/ProjectList";
+import SystemStats from "@/components/SystemStats";
 import Link from "next/link";
 
 export default async function DashboardPage() {
@@ -23,6 +24,10 @@ export default async function DashboardPage() {
           </form>
         </nav>
       </header>
+
+      <div className="mb-8">
+        <SystemStats />
+      </div>
 
       <ProjectList />
     </div>
