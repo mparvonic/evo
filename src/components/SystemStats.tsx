@@ -19,104 +19,62 @@ function fmtUptime(s: number) {
   return `${m}m`;
 }
 
-function Bar({ pct, color = "bg-blue-500" }: { pct: number; color?: string }) {
-  return (
-    <div className="w-full bg-gray-800 rounded-full h-1.5 mt-1">
-      <div
-        className={`${color} h-1.5 rounded-full transition-all duration-500`}
-        style={{ width: `${Math.min(pct, 100)}%` }}
-      />
-    </div>
-  );
-}
-
-function StatCard({ label, value, sub, pct, color }: {
-  label: string; value: string; sub?: string; pct?: number; color?: string;
-}) {
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <p className="text-xs text-gray-600 uppercase tracking-wider mb-1">{label}</p>
-      <p className="text-xl font-bold">{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
-      {pct !== undefined && <Bar pct={pct} color={color} />}
-    </div>
-  );
+function Dot({ color }: { color: string }) {
+  return <span className={`inline-block w-1.5 h-1.5 rounded-full ${color} flex-shrink-0`} />;
 }
 
 export default function SystemStats() {
   const { data, error } = useSWR("/api/system/stats", fetcher, { refreshInterval: 5000 });
 
-  if (error) return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-gray-600 text-sm">
-      EVO-X2 nedostupný
-    </div>
-  );
-
-  if (!data) return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-gray-600 text-sm animate-pulse">
-      Načítám stats...
-    </div>
-  );
-
-  const cpuColor = data.cpu.pct > 80 ? "bg-red-500" : data.cpu.pct > 50 ? "bg-yellow-500" : "bg-blue-500";
-  const ramColor = data.ram.pct > 85 ? "bg-red-500" : data.ram.pct > 65 ? "bg-yellow-500" : "bg-blue-500";
-  const vramPct = data.gpu ? Math.round(data.ollama_vram_used / data.gpu.total * 100) : 0;
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">EVO-X2 · live</h2>
-        <span className="text-xs text-gray-600">uptime {fmtUptime(data.uptime_s)}</span>
+    <div className="flex items-center gap-4 px-4 py-2 border-t border-gray-800 bg-gray-950 text-xs flex-wrap">
+      <div className="flex items-center gap-1.5">
+        <Dot color={error ? "bg-red-500" : data ? "bg-green-500" : "bg-yellow-500 animate-pulse"} />
+        <span className="text-gray-500 font-medium">EVO-X2</span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          label="CPU"
-          value={`${data.cpu.pct.toFixed(0)}%`}
-          sub={`${data.cpu.cores} cores`}
-          pct={data.cpu.pct}
-          color={cpuColor}
-        />
-        <StatCard
-          label="RAM (OS)"
-          value={`${data.ram.pct.toFixed(0)}%`}
-          sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
-          pct={data.ram.pct}
-          color={ramColor}
-        />
-        <StatCard
-          label="Modely v GPU"
-          value={fmt(data.ollama_vram_used)}
-          sub={data.gpu ? `z ${fmt(data.gpu.total)} GPU pool` : "GPU nedostupné"}
-          pct={vramPct}
-          color="bg-purple-500"
-        />
-        {data.disk && (
-          <StatCard
-            label="/data disk"
-            value={`${data.disk.pct.toFixed(0)}%`}
-            sub={`${fmt(data.disk.used)} / ${fmt(data.disk.total)}`}
-            pct={data.disk.pct}
-            color={data.disk.pct > 85 ? "bg-red-500" : "bg-green-500"}
-          />
-        )}
-      </div>
+      {error && <span className="text-red-500">nedostupný</span>}
 
-      {data.ollama_models?.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
-          <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Ollama – načtené modely</p>
-          <div className="flex flex-col gap-2">
-            {data.ollama_models.map((m: { name: string; size: number; size_vram: number }) => (
-              <div key={m.name} className="flex items-center justify-between">
-                <span className="text-xs bg-purple-900 text-purple-300 px-2 py-0.5 rounded-full">{m.name}</span>
-                <div className="text-xs text-gray-500 flex gap-3">
-                  <span>celkem {fmt(m.size)}</span>
-                  <span className="text-purple-400">GPU {fmt(m.size_vram)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {data && (
+        <>
+          <span className="text-gray-600">CPU</span>
+          <span className={data.cpu.pct > 80 ? "text-yellow-400" : "text-gray-300"}>
+            {data.cpu.pct.toFixed(0)}%
+          </span>
+
+          <span className="text-gray-800">·</span>
+
+          <span className="text-gray-600">RAM</span>
+          <span className={data.ram.pct > 80 ? "text-yellow-400" : "text-gray-300"}>
+            {data.ram.pct.toFixed(0)}% ({fmt(data.ram.used)}/{fmt(data.ram.total)})
+          </span>
+
+          {data.ollama_models?.length > 0 && (
+            <>
+              <span className="text-gray-800">·</span>
+              <span className="text-gray-600">modely</span>
+              {data.ollama_models.map((m: { name: string; size: number }) => (
+                <span key={m.name} className="text-purple-400">
+                  {m.name.split(":")[0]} ({fmt(m.size)})
+                </span>
+              ))}
+            </>
+          )}
+
+          {data.disk && (
+            <>
+              <span className="text-gray-800">·</span>
+              <span className="text-gray-600">/data</span>
+              <span className={data.disk.pct > 85 ? "text-yellow-400" : "text-gray-300"}>
+                {data.disk.pct.toFixed(0)}% ({fmt(data.disk.used)}/{fmt(data.disk.total)})
+              </span>
+            </>
+          )}
+
+          <span className="text-gray-800">·</span>
+          <span className="text-gray-600">uptime</span>
+          <span className="text-gray-400">{fmtUptime(data.uptime_s)}</span>
+        </>
       )}
     </div>
   );
