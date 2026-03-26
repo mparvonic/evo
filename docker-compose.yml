@@ -1,0 +1,11 @@
+services:
+  legai-web:
+    build: .
+    container_name: legai-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3010:3010"
+    env_file: .env
+    environment:
+      - PORT=3010
+      - HOSTNAME=0.0.0.0

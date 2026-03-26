@@ -1,0 +1,30 @@
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import ProjectList from "@/components/ProjectList";
+import Link from "next/link";
+
+export default async function DashboardPage() {
+  const session = await auth();
+  if (!session) redirect("/login");
+
+  return (
+    <div className="min-h-screen p-6">
+      <header className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold">EVO Dashboard</h1>
+          <p className="text-gray-400 text-sm mt-1">EVO-X2 · {new Date().toLocaleDateString("cs-CZ")}</p>
+        </div>
+        <nav className="flex items-center gap-4 text-sm">
+          <Link href="/legai" className="text-blue-400 hover:text-blue-300">
+            /legai prototype
+          </Link>
+          <form action="/api/auth/signout" method="POST">
+            <button className="text-gray-500 hover:text-gray-300">Odhlásit</button>
+          </form>
+        </nav>
+      </header>
+
+      <ProjectList />
+    </div>
+  );
+}
