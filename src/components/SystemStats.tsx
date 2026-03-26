@@ -78,21 +78,19 @@ export default function SystemStats() {
           color={cpuColor}
         />
         <StatCard
-          label="System RAM"
+          label="RAM (OS)"
           value={`${data.ram.pct.toFixed(0)}%`}
           sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
           pct={data.ram.pct}
           color={ramColor}
         />
-        {data.gpu && (
-          <StatCard
-            label="GPU VRAM (modely)"
-            value={`${fmt(data.ollama_vram_used)}`}
-            sub={`z ${fmt(data.gpu.total)} rezervováno`}
-            pct={vramPct}
-            color="bg-purple-500"
-          />
-        )}
+        <StatCard
+          label="Modely v GPU"
+          value={fmt(data.ollama_vram_used)}
+          sub={data.gpu ? `z ${fmt(data.gpu.total)} GPU pool` : "GPU nedostupné"}
+          pct={vramPct}
+          color="bg-purple-500"
+        />
         {data.disk && (
           <StatCard
             label="/data disk"
