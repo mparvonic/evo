@@ -59,7 +59,8 @@ export default function SystemStats() {
   );
 
   const cpuColor = data.cpu.pct > 80 ? "bg-red-500" : data.cpu.pct > 50 ? "bg-yellow-500" : "bg-blue-500";
-  const ramColor = data.ram.pct > 85 ? "bg-red-500" : data.ram.pct > 65 ? "bg-yellow-500" : "bg-blue-500";
+  const unified = data.unified;
+  const unifiedColor = unified?.pct > 85 ? "bg-red-500" : unified?.pct > 65 ? "bg-yellow-500" : "bg-blue-500";
 
   return (
     <div className="space-y-3">
@@ -76,39 +77,23 @@ export default function SystemStats() {
           pct={data.cpu.pct}
           color={cpuColor}
         />
-        {/* Unified memory = RAM + GPU — zobraz jako jeden pool */}
-        {data.gpu ? (() => {
-          const totalUnified = data.ram.total + data.gpu.total;
-          const usedUnified = data.ram.used + data.gpu.used;
-          const pctUnified = Math.round(usedUnified / totalUnified * 100);
-          const color = pctUnified > 85 ? "bg-red-500" : pctUnified > 65 ? "bg-yellow-500" : "bg-blue-500";
-          return (
-            <StatCard
-              label="Unified Memory"
-              value={`${pctUnified}%`}
-              sub={`${fmt(usedUnified)} / ${fmt(totalUnified)}`}
-              pct={pctUnified}
-              color={color}
-            />
-          );
-        })() : (
+        {unified ? (
+          <StatCard
+            label="Unified Memory"
+            value={`${unified.pct}%`}
+            sub={`${fmt(unified.used)} / ${fmt(unified.total)}`}
+            pct={unified.pct}
+            color={unifiedColor}
+          />
+        ) : (
           <StatCard
             label="RAM"
             value={`${data.ram.pct.toFixed(0)}%`}
             sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
             pct={data.ram.pct}
-            color={ramColor}
+            color="bg-blue-500"
           />
         )}
-        {data.gpu ? (
-          <StatCard
-            label="GPU VRAM"
-            value={`${data.gpu.pct}%`}
-            sub={`${fmt(data.gpu.used)} / ${fmt(data.gpu.total)}`}
-            pct={data.gpu.pct}
-            color="bg-purple-500"
-          />
-        ) : null}
         {data.disk ? (
           <StatCard
             label="/data disk"
@@ -118,16 +103,27 @@ export default function SystemStats() {
             color={data.disk.pct > 85 ? "bg-red-500" : "bg-green-500"}
           />
         ) : null}
+        <StatCard
+          label="System RAM"
+          value={`${data.ram.pct.toFixed(0)}%`}
+          sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
+          pct={data.ram.pct}
+          color="bg-blue-500"
+        />
       </div>
 
-      {data.ollama_models.length > 0 && (
+      {data.ollama_models?.length > 0 && (
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
           <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Ollama – načtené modely</p>
-          <div className="flex flex-wrap gap-2">
-            {data.ollama_models.map((m: string) => (
-              <span key={m} className="text-xs bg-purple-900 text-purple-300 px-2 py-0.5 rounded-full">
-                {m}
-              </span>
+          <div className="flex flex-col gap-2">
+            {data.ollama_models.map((m: { name: string; size: number; size_vram: number }) => (
+              <div key={m.name} className="flex items-center justify-between">
+                <span className="text-xs bg-purple-900 text-purple-300 px-2 py-0.5 rounded-full">{m.name}</span>
+                <div className="text-xs text-gray-500 flex gap-3">
+                  <span>celkem {fmt(m.size)}</span>
+                  <span className="text-purple-400">GPU {fmt(m.size_vram)}</span>
+                </div>
+              </div>
             ))}
           </div>
         </div>
