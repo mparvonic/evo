@@ -59,8 +59,8 @@ export default function SystemStats() {
   );
 
   const cpuColor = data.cpu.pct > 80 ? "bg-red-500" : data.cpu.pct > 50 ? "bg-yellow-500" : "bg-blue-500";
-  const unified = data.unified;
-  const unifiedColor = unified?.pct > 85 ? "bg-red-500" : unified?.pct > 65 ? "bg-yellow-500" : "bg-blue-500";
+  const ramColor = data.ram.pct > 85 ? "bg-red-500" : data.ram.pct > 65 ? "bg-yellow-500" : "bg-blue-500";
+  const vramPct = data.gpu ? Math.round(data.ollama_vram_used / data.gpu.total * 100) : 0;
 
   return (
     <div className="space-y-3">
@@ -77,24 +77,23 @@ export default function SystemStats() {
           pct={data.cpu.pct}
           color={cpuColor}
         />
-        {unified ? (
+        <StatCard
+          label="System RAM"
+          value={`${data.ram.pct.toFixed(0)}%`}
+          sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
+          pct={data.ram.pct}
+          color={ramColor}
+        />
+        {data.gpu && (
           <StatCard
-            label="Unified Memory"
-            value={`${unified.pct}%`}
-            sub={`${fmt(unified.used)} / ${fmt(unified.total)}`}
-            pct={unified.pct}
-            color={unifiedColor}
-          />
-        ) : (
-          <StatCard
-            label="RAM"
-            value={`${data.ram.pct.toFixed(0)}%`}
-            sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
-            pct={data.ram.pct}
-            color="bg-blue-500"
+            label="GPU VRAM (modely)"
+            value={`${fmt(data.ollama_vram_used)}`}
+            sub={`z ${fmt(data.gpu.total)} rezervováno`}
+            pct={vramPct}
+            color="bg-purple-500"
           />
         )}
-        {data.disk ? (
+        {data.disk && (
           <StatCard
             label="/data disk"
             value={`${data.disk.pct.toFixed(0)}%`}
@@ -102,14 +101,7 @@ export default function SystemStats() {
             pct={data.disk.pct}
             color={data.disk.pct > 85 ? "bg-red-500" : "bg-green-500"}
           />
-        ) : null}
-        <StatCard
-          label="System RAM"
-          value={`${data.ram.pct.toFixed(0)}%`}
-          sub={`${fmt(data.ram.used)} / ${fmt(data.ram.total)}`}
-          pct={data.ram.pct}
-          color="bg-blue-500"
-        />
+        )}
       </div>
 
       {data.ollama_models?.length > 0 && (
