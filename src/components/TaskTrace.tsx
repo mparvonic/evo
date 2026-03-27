@@ -69,7 +69,7 @@ function AgentBlock({ b }: { b: Extract<Block, { type: "agent" }> }) {
         </div>
       </div>
       <div className="p-4 space-y-3">
-        {b.prompt && (
+        {b.prompt != null && (
           <div>
             <p className="text-xs text-gray-500 mb-1">Prompt</p>
             <JsonView data={b.prompt} />
@@ -131,7 +131,7 @@ function GenBlock({ b }: { b: Extract<Block, { type: "generation" }> }) {
         </div>
       </div>
       <div className="p-4 space-y-2">
-        {b.prompt && <JsonView data={b.prompt} />}
+        {b.prompt != null && <JsonView data={b.prompt} />}
         {b.response && (
           <pre className="text-sm text-gray-300 whitespace-pre-wrap">{b.response}</pre>
         )}
