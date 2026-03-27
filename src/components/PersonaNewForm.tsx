@@ -19,8 +19,6 @@ export default function PersonaNewForm() {
     jmeno: "",
     role: "",
     model: "evo-fast",
-    system_prompt: "",
-    aktivni: true,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -117,29 +115,9 @@ export default function PersonaNewForm() {
         </select>
       </div>
 
-      <div>
-        <label className="block text-xs text-gray-400 mb-1">System prompt</label>
-        <textarea
-          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-600"
-          rows={6}
-          value={form.system_prompt}
-          onChange={(e) => set("system_prompt", e.target.value)}
-          placeholder="Instrukce pro personu při hodnocení plánu..."
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="aktivni"
-          checked={form.aktivni}
-          onChange={(e) => set("aktivni", e.target.checked)}
-          className="rounded"
-        />
-        <label htmlFor="aktivni" className="text-sm text-gray-300">
-          Aktivní od začátku
-        </label>
-      </div>
+      <p className="text-xs text-gray-500">
+        Po vytvoření můžeš v detailu persony upravit persona.md, use-cases.md a vygenerovat prompty.
+      </p>
 
       {error && (
         <p className="text-sm text-red-400">Chyba: {error}</p>

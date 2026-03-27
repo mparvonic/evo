@@ -2,9 +2,11 @@
 
 import useSWR from "swr";
 import dynamic from "next/dynamic";
-import { useState, useRef } from "react";
+import { useState } from "react";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+
+type PromptFile = { soubor: string; content: string };
 
 type PersonaFull = {
   slug: string;
@@ -12,11 +14,11 @@ type PersonaFull = {
   role: string;
   model: string;
   aktivni: boolean;
-  system_prompt: string;
-  profil: string;
+  persona: string;
   use_cases: string;
-  profil_excerpt: string;
+  persona_excerpt: string;
   use_case_count: number;
+  prompts_ready: boolean;
 };
 
 const MODEL_LABELS: Record<string, string> = {
@@ -30,32 +32,36 @@ const MODEL_LABELS: Record<string, string> = {
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-type Tab = "profil" | "use_cases" | "agent";
+type Tab = "profil" | "use_cases" | "prompty" | "nastaveni";
+
+// ── Monaco editor tab pro MD soubory ────────────────────────────────────────
 
 function MarkdownTab({
-  content,
+  initialContent,
   slug,
-  soubor,
+  field,
+  filename,
   onSaved,
 }: {
-  content: string;
+  initialContent: string;
   slug: string;
-  soubor: "profil.md" | "use-cases.md";
+  field: "persona" | "use_cases";
+  filename: string;
   onSaved: () => void;
 }) {
-  const [draft, setDraft] = useState(content);
+  const [draft, setDraft] = useState(initialContent);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
   function handleChange(val: string | undefined) {
-    setDraft(val ?? "");
-    setDirty((val ?? "") !== content);
+    const v = val ?? "";
+    setDraft(v);
+    setDirty(v !== initialContent);
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const field = soubor === "profil.md" ? "profil" : "use_cases";
       await fetch(`/api/personas/${slug}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -71,7 +77,7 @@ function MarkdownTab({
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-1 py-2 shrink-0">
-        <span className="text-xs text-gray-500 font-mono">{soubor}</span>
+        <span className="text-xs text-gray-500 font-mono">{filename}</span>
         <button
           onClick={handleSave}
           disabled={!dirty || saving}
@@ -103,25 +109,123 @@ function MarkdownTab({
   );
 }
 
-function AgentTab({
-  persona,
-  onSaved,
-}: {
-  persona: PersonaFull;
-  onSaved: () => void;
-}) {
+// ── Záložka Prompty ──────────────────────────────────────────────────────────
+
+function PromptsTab({ slug, onRegenerated }: { slug: string; onRegenerated: () => void }) {
+  const { data: prompts, mutate } = useSWR<PromptFile[]>(
+    `/api/personas/${slug}/prompts`,
+    fetcher
+  );
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError("");
+    try {
+      const r = await fetch(`/api/personas/${slug}/generate-prompts`, { method: "POST" });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail ?? `HTTP ${r.status}`);
+      }
+      await mutate();
+      onRegenerated();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  const selectedPrompt = prompts?.find((p) => p.soubor === selected) ?? prompts?.[0];
+
+  return (
+    <div className="flex flex-col h-full gap-3">
+      <div className="flex items-center justify-between shrink-0">
+        <p className="text-xs text-gray-500">
+          {prompts?.length
+            ? `${prompts.length} vygenerovaných souborů v prompts/`
+            : "Žádné prompty — klikni Generovat"}
+        </p>
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="text-xs px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 disabled:opacity-40 rounded font-medium"
+        >
+          {generating ? "Generuji..." : "↺ Regenerovat prompty"}
+        </button>
+      </div>
+
+      {error && <p className="text-xs text-red-400 shrink-0">Chyba: {error}</p>}
+
+      {prompts && prompts.length > 0 && (
+        <div className="flex gap-3 flex-1 min-h-0">
+          {/* Sidebar se soubory */}
+          <div className="w-44 shrink-0 space-y-1">
+            {prompts.map((p) => (
+              <button
+                key={p.soubor}
+                onClick={() => setSelected(p.soubor)}
+                className={`w-full text-left px-3 py-2 rounded text-xs font-mono transition-colors ${
+                  (selected ?? prompts[0].soubor) === p.soubor
+                    ? "bg-gray-700 text-white"
+                    : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+                }`}
+              >
+                {p.soubor}
+              </button>
+            ))}
+          </div>
+
+          {/* Obsah souboru */}
+          {selectedPrompt && (
+            <div className="flex-1 min-w-0 rounded border border-gray-800 overflow-hidden">
+              <MonacoEditor
+                height="100%"
+                language="markdown"
+                theme="vs-dark"
+                value={selectedPrompt.content}
+                options={{
+                  readOnly: true,
+                  minimap: { enabled: false },
+                  wordWrap: "on",
+                  lineNumbers: "off",
+                  folding: false,
+                  renderLineHighlight: "none",
+                  scrollBeyondLastLine: false,
+                  fontSize: 13,
+                  padding: { top: 12, bottom: 12 },
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {generating && (
+        <div className="flex items-center gap-2 text-xs text-gray-400 shrink-0">
+          <span className="animate-pulse">●</span>
+          Generuji prompty pomocí evo-planner...
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Záložka Nastavení (agent.yaml) ───────────────────────────────────────────
+
+function NastaveniTab({ persona, onSaved }: { persona: PersonaFull; onSaved: () => void }) {
   const [form, setForm] = useState({
     jmeno: persona.jmeno,
     role: persona.role,
     model: persona.model,
-    system_prompt: persona.system_prompt,
     aktivni: persona.aktivni,
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const set = (k: string, v: string | boolean) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -141,7 +245,9 @@ function AgentTab({
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-4 max-w-2xl">
+    <form onSubmit={handleSave} className="space-y-4 max-w-lg">
+      <p className="text-xs text-gray-500 font-mono mb-4">agent.yaml</p>
+
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-xs text-gray-400 mb-1">Slug (ID)</label>
@@ -168,8 +274,6 @@ function AgentTab({
           className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-600"
           value={form.role}
           onChange={(e) => set("role", e.target.value)}
-          placeholder="Krátký popis role"
-          required
         />
       </div>
 
@@ -186,17 +290,6 @@ function AgentTab({
         </select>
       </div>
 
-      <div>
-        <label className="block text-xs text-gray-400 mb-1">System prompt</label>
-        <textarea
-          className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-blue-600"
-          rows={8}
-          value={form.system_prompt}
-          onChange={(e) => set("system_prompt", e.target.value)}
-          placeholder="Instrukce pro personu při hodnocení plánu..."
-        />
-      </div>
-
       <div className="flex items-center gap-2">
         <input
           type="checkbox"
@@ -210,18 +303,18 @@ function AgentTab({
         </label>
       </div>
 
-      <div>
-        <button
-          type="submit"
-          disabled={saving}
-          className="px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 rounded text-sm font-medium"
-        >
-          {saving ? "Ukládám..." : saved ? "✓ Uloženo" : "Uložit"}
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={saving}
+        className="px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 rounded text-sm font-medium"
+      >
+        {saving ? "Ukládám..." : saved ? "✓ Uloženo" : "Uložit"}
+      </button>
     </form>
   );
 }
+
+// ── Hlavní komponenta ────────────────────────────────────────────────────────
 
 export default function PersonaDetail({ slug }: { slug: string }) {
   const { data: persona, mutate } = useSWR<PersonaFull>(
@@ -234,18 +327,19 @@ export default function PersonaDetail({ slug }: { slug: string }) {
     return <div className="text-gray-500 text-sm">Načítám personu...</div>;
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "profil",    label: "Profil" },
-    { id: "use_cases", label: `Use Cases (${persona.use_case_count})` },
-    { id: "agent",     label: "Agent" },
+  const tabs: { id: Tab; label: string; badge?: string }[] = [
+    { id: "profil",    label: "Profil",     badge: "persona.md" },
+    { id: "use_cases", label: "Use Cases",  badge: `${persona.use_case_count}` },
+    { id: "prompty",   label: "Prompty",    badge: persona.prompts_ready ? "✓" : "!" },
+    { id: "nastaveni", label: "Nastavení" },
   ];
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
       {/* Hlavička */}
-      <div className="flex items-center justify-between mb-4 shrink-0">
+      <div className="flex items-center justify-between mb-5 shrink-0">
         <div>
-          <div className="flex items-center gap-3 mb-0.5">
+          <div className="flex items-center gap-3 mb-1">
             <h1 className="text-xl font-bold">{persona.jmeno}</h1>
             <span className="text-xs text-gray-600 font-mono">{persona.slug}</span>
             {persona.aktivni ? (
@@ -264,37 +358,53 @@ export default function PersonaDetail({ slug }: { slug: string }) {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === t.id
                 ? "border-blue-500 text-white"
                 : "border-transparent text-gray-400 hover:text-gray-200"
             }`}
           >
             {t.label}
+            {t.badge && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                t.id === "prompty"
+                  ? persona.prompts_ready
+                    ? "bg-green-900/50 text-green-400"
+                    : "bg-yellow-900/50 text-yellow-400"
+                  : "bg-gray-800 text-gray-500"
+              }`}>
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Obsah záložky */}
+      {/* Obsah */}
       <div className="flex-1 min-h-0">
         {tab === "profil" && (
           <MarkdownTab
-            content={persona.profil}
+            initialContent={persona.persona}
             slug={slug}
-            soubor="profil.md"
+            field="persona"
+            filename="persona.md"
             onSaved={mutate}
           />
         )}
         {tab === "use_cases" && (
           <MarkdownTab
-            content={persona.use_cases}
+            initialContent={persona.use_cases}
             slug={slug}
-            soubor="use-cases.md"
+            field="use_cases"
+            filename="use-cases.md"
             onSaved={mutate}
           />
         )}
-        {tab === "agent" && (
-          <AgentTab persona={persona} onSaved={mutate} />
+        {tab === "prompty" && (
+          <PromptsTab slug={slug} onRegenerated={mutate} />
+        )}
+        {tab === "nastaveni" && (
+          <NastaveniTab persona={persona} onSaved={mutate} />
         )}
       </div>
     </div>

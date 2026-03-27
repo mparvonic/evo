@@ -9,8 +9,9 @@ type PersonaMeta = {
   jmeno: string;
   role: string;
   aktivni: boolean;
-  profil_excerpt: string;
+  persona_excerpt: string;
   use_case_count: number;
+  prompts_ready: boolean;
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -74,12 +75,19 @@ export default function PersonaCatalog() {
                 )}
               </div>
               <p className="text-sm text-gray-400 mb-2">{p.role}</p>
-              {p.profil_excerpt && (
-                <p className="text-xs text-gray-500 line-clamp-2">{p.profil_excerpt}</p>
+              {p.persona_excerpt && (
+                <p className="text-xs text-gray-500 line-clamp-2">{p.persona_excerpt}</p>
               )}
-              {p.use_case_count > 0 && (
-                <p className="text-xs text-gray-600 mt-1">{p.use_case_count} use case{p.use_case_count !== 1 ? "s" : ""}</p>
-              )}
+              <div className="flex items-center gap-3 mt-1">
+                {p.use_case_count > 0 && (
+                  <span className="text-xs text-gray-600">{p.use_case_count} use case{p.use_case_count !== 1 ? "s" : ""}</span>
+                )}
+                {p.prompts_ready ? (
+                  <span className="text-xs text-green-700">prompty ✓</span>
+                ) : (
+                  <span className="text-xs text-yellow-800">prompty chybí</span>
+                )}
+              </div>
             </Link>
 
             {/* Akce */}
