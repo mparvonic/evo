@@ -221,7 +221,7 @@ function Tasks({ projekt }: { projekt: string }) {
             {tasks.map((t) => (
               <Link
                 key={t.id}
-                href={`/dashboard/project/${projekt}/task/${t.id}`}
+                href={`/dashboard/project/${projekt}/task/${t.task_id || t.id}`}
                 className="flex items-center gap-4 px-4 py-3 hover:bg-gray-800 transition-colors"
               >
                 <span className={`text-xs font-medium w-14 flex-shrink-0 ${STATUS_STYLE[t.status] ?? "text-gray-500"}`}>
@@ -277,7 +277,7 @@ function Outputs({ projekt }: { projekt: string }) {
           >
             <div className="truncate font-medium">{f.name.replace(".md", "")}</div>
             <div className="text-xs text-gray-600 mt-0.5">
-              {new Date(f.modified * 1000).toLocaleDateString("cs-CZ")} · {Math.round(f.size / 1024)}kB
+              {new Date(f.modified * 1000).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })} · {Math.round(f.size / 1024)}kB
             </div>
           </button>
         ))}

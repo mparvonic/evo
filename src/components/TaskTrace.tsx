@@ -150,10 +150,13 @@ function SpanBlock({ b }: { b: Extract<Block, { type: "span" }> }) {
 }
 
 export default function TaskTrace({ projekt, taskId }: { projekt: string; taskId: string }) {
-  const { data: trace, error, isLoading } = useSWR<Trace>(
+  const { data: raw, error, isLoading } = useSWR(
     `/api/projects/${projekt}/tasks/${taskId}`,
     fetcher
   );
+  // API může vrátit {detail: "..."} při 404 — ošetři to
+  const trace: Trace | null = raw && raw.trace_id ? raw as Trace : null;
+  const apiError = error || (raw && !raw.trace_id ? raw.detail || "Trace nenalezen" : null);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -190,7 +193,7 @@ export default function TaskTrace({ projekt, taskId }: { projekt: string; taskId
       {/* Bloky */}
       <div className="p-6 space-y-4 max-w-4xl">
         {isLoading && <p className="text-gray-600">Načítám trace...</p>}
-        {error && <p className="text-red-400">Trace nedostupný</p>}
+        {apiError && <p className="text-red-400">Trace nedostupný: {typeof apiError === "string" ? apiError : "chyba API"}</p>}
         {trace?.blocks?.length === 0 && (
           <p className="text-gray-600">Žádné bloky v tomto trace.</p>
         )}
