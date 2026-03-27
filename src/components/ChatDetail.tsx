@@ -3,6 +3,8 @@
 import useSWR from "swr";
 import Link from "next/link";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import DeleteChatModal from "./DeleteChatModal";
 
 type Message = {
   id: string;
@@ -35,9 +37,10 @@ function fmtTime(iso: string) {
 }
 
 const CHAT_MODELS = [
-  { id: "evo-executor", label: "qwen2.5:72b", desc: "výchozí · lokální" },
-  { id: "evo-chat",     label: "llama3.3:70b", desc: "kvalitní · lokální" },
-  { id: "claude-sonnet", label: "claude-sonnet", desc: "nejlepší · cloud" },
+  { id: "evo-executor",  label: "qwen2.5:72b",    desc: "výchozí · lokální" },
+  { id: "evo-chat",      label: "llama3.3:70b",   desc: "kvalitní · lokální" },
+  { id: "claude-sonnet", label: "claude-sonnet",  desc: "nejlepší · cloud" },
+  { id: "gpt-4o",        label: "gpt-4o",         desc: "OpenAI · cloud" },
 ] as const;
 
 // ── Záložka: Konverzace ────────────────────────────────────────────────────────
@@ -357,6 +360,8 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
   const { data: meta, mutate } = useSWR<ChatMeta>(`/api/chats/${chatId}`, fetcher);
   const [tab, setTab] = useState<"konverzace" | "vystupy" | "tasky">("konverzace");
   const [selectedModel, setSelectedModel] = useState("evo-executor");
+  const [showDelete, setShowDelete] = useState(false);
+  const router = useRouter();
 
   if (!meta) {
     return (
@@ -364,6 +369,15 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
         Načítám chat…
       </div>
     );
+  }
+
+  async function handleDeleteConfirm(filesToDelete: string[]) {
+    await fetch(`/api/chats/${chatId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ delete_outputs: filesToDelete }),
+    });
+    router.push("/dashboard/chats");
   }
 
   const tabs = [
@@ -401,6 +415,16 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
             </option>
           ))}
         </select>
+        {/* Smazat chat */}
+        <button
+          onClick={() => setShowDelete(true)}
+          title="Smazat chat"
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-600 hover:text-red-400 hover:bg-gray-800 transition-colors shrink-0"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
+          </svg>
+        </button>
       </div>
 
       {/* Záložky */}
@@ -432,6 +456,15 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
         )}
         {tab === "tasky" && <TasksTab />}
       </div>
+
+      {showDelete && (
+        <DeleteChatModal
+          chatId={chatId}
+          chatTitle={meta.title}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setShowDelete(false)}
+        />
+      )}
     </div>
   );
 }
