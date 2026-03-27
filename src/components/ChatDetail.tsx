@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DeleteChatModal from "./DeleteChatModal";
+import ModelPickerModal from "./ModelPickerModal";
+import { getDefaultModel, getModelInfo } from "@/lib/models";
 
 type Message = {
   id: string;
@@ -36,12 +38,6 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
 }
 
-const CHAT_MODELS = [
-  { id: "evo-executor",  label: "qwen2.5:72b",    desc: "výchozí · lokální" },
-  { id: "evo-chat",      label: "llama3.3:70b",   desc: "kvalitní · lokální" },
-  { id: "claude-sonnet", label: "claude-sonnet",  desc: "nejlepší · cloud" },
-  { id: "gpt-4o",        label: "gpt-4o",         desc: "OpenAI · cloud" },
-] as const;
 
 // ── Záložka: Konverzace ────────────────────────────────────────────────────────
 
@@ -361,7 +357,13 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
   const [tab, setTab] = useState<"konverzace" | "vystupy" | "tasky">("konverzace");
   const [selectedModel, setSelectedModel] = useState("evo-executor");
   const [showDelete, setShowDelete] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
   const router = useRouter();
+
+  // Načti výchozí model z localStorage při prvním renderu
+  useEffect(() => {
+    setSelectedModel(getDefaultModel());
+  }, []);
 
   if (!meta) {
     return (
@@ -404,17 +406,36 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
           </div>
         )}
         {/* Model selector */}
-        <select
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
-          className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded-lg px-2 py-1.5 outline-none hover:border-gray-500 transition-colors"
-        >
-          {CHAT_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label} — {m.desc}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1 shrink-0">
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded-l-lg rounded-r-none px-2 py-1.5 outline-none hover:border-gray-500 transition-colors"
+          >
+            {[selectedModel, ...(getModelInfo(selectedModel) ? [] : [])].filter(Boolean).map(() => null)}
+            {/* Všechny modely jako options */}
+            <option value="evo-executor">qwen2.5:72b — lokální</option>
+            <option value="evo-chat">llama3.3:70b — lokální</option>
+            <option value="evo-planner">deepseek-r1:32b — lokální</option>
+            <option value="claude-haiku">Claude Haiku — cloud</option>
+            <option value="claude-sonnet">Claude Sonnet — cloud</option>
+            <option value="claude-opus">Claude Opus — cloud</option>
+            <option value="gpt-4o-mini">GPT-4o mini — cloud</option>
+            <option value="gpt-4o">GPT-4o — cloud</option>
+            <option value="gpt-5">GPT-5 — cloud</option>
+            <option value="o3-mini">o3-mini — reasoning</option>
+            <option value="o4-mini">o4-mini — reasoning</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash — cloud</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro — cloud</option>
+          </select>
+          <button
+            onClick={() => setShowPicker(true)}
+            title="Přehled modelů"
+            className="bg-gray-800 border border-gray-700 border-l-0 hover:border-gray-500 text-gray-400 hover:text-gray-200 text-xs rounded-r-lg px-2 py-1.5 transition-colors"
+          >
+            ⊞
+          </button>
+        </div>
         {/* Smazat chat */}
         <button
           onClick={() => setShowDelete(true)}
@@ -463,6 +484,14 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
           chatTitle={meta.title}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setShowDelete(false)}
+        />
+      )}
+
+      {showPicker && (
+        <ModelPickerModal
+          current={selectedModel}
+          onSelect={setSelectedModel}
+          onClose={() => setShowPicker(false)}
         />
       )}
     </div>

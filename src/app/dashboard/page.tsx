@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import ProjectList from "@/components/ProjectList";
 import SystemStats from "@/components/SystemStats";
+import ChatModelDefault from "@/components/ChatModelDefault";
 import Link from "next/link";
 
 export default async function DashboardPage() {
@@ -28,6 +29,11 @@ export default async function DashboardPage() {
         </header>
 
         <ProjectList />
+
+        {/* Nastavení chatů */}
+        <div className="mt-8 pt-6 border-t border-gray-800">
+          <ChatModelDefault />
+        </div>
       </div>
 
       <SystemStats />
