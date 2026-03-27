@@ -12,7 +12,8 @@ type Block =
   | { type: "agent"; name: string; model: string; prompt: unknown; response: string; tool_calls: ToolCall[]; tokens: number; ts: string }
   | { type: "summary"; content: string; ts: string }
   | { type: "generation"; name: string; model: string; prompt: unknown; response: string; tokens: number; cost_usd: number; ts: string }
-  | { type: "span"; name: string; content: string; ts: string };
+  | { type: "span"; name: string; content: string; ts: string }
+  | { type: "workspace"; name: string; content: string; ts: string };
 
 type Trace = {
   trace_id: string;
@@ -149,6 +150,20 @@ function SpanBlock({ b }: { b: Extract<Block, { type: "span" }> }) {
   );
 }
 
+function WorkspaceBlock({ b }: { b: Extract<Block, { type: "workspace" }> }) {
+  return (
+    <div className="border border-indigo-900 bg-indigo-950/20 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-indigo-900/50">
+        <p className="text-xs text-indigo-400 font-medium uppercase tracking-wider">{b.name}</p>
+        <p className="text-xs text-gray-600">{fmtTime(b.ts)}</p>
+      </div>
+      <pre className="text-sm text-gray-200 whitespace-pre-wrap p-4 overflow-auto max-h-[70vh]">
+        {b.content}
+      </pre>
+    </div>
+  );
+}
+
 export default function TaskTrace({ projekt, taskId }: { projekt: string; taskId: string }) {
   const { data: raw, error, isLoading } = useSWR(
     `/api/projects/${projekt}/tasks/${taskId}`,
@@ -198,11 +213,12 @@ export default function TaskTrace({ projekt, taskId }: { projekt: string; taskId
           <p className="text-gray-600">Žádné bloky v tomto trace.</p>
         )}
         {trace?.blocks?.map((b, i) => {
-          if (b.type === "plan")       return <PlanBlock    key={i} b={b} />;
-          if (b.type === "agent")      return <AgentBlock   key={i} b={b} />;
-          if (b.type === "summary")    return <SummaryBlock key={i} b={b} />;
-          if (b.type === "generation") return <GenBlock     key={i} b={b} />;
-          if (b.type === "span")       return <SpanBlock    key={i} b={b} />;
+          if (b.type === "plan")       return <PlanBlock      key={i} b={b} />;
+          if (b.type === "agent")      return <AgentBlock     key={i} b={b} />;
+          if (b.type === "summary")    return <SummaryBlock   key={i} b={b} />;
+          if (b.type === "generation") return <GenBlock       key={i} b={b} />;
+          if (b.type === "span")       return <SpanBlock      key={i} b={b} />;
+          if (b.type === "workspace")  return <WorkspaceBlock key={i} b={b} />;
           return null;
         })}
       </div>
