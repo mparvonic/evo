@@ -7,6 +7,10 @@ import Chat from "@/components/Chat";
 import Link from "next/link";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+const MonacoDiffEditor = dynamic(
+  () => import("@monaco-editor/react").then((m) => ({ default: m.DiffEditor })),
+  { ssr: false }
+);
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -224,6 +228,7 @@ function Outputs({ projekt }: { projekt: string }) {
 // ── Knowledge Base ─────────────────────────────────────────────────────────
 
 type GitCommit = { sha: string; message: string; author: string; ts: string };
+type DiffData = { original: string; modified: string; sha: string; message: string; author: string; ts: string };
 
 function isReadOnlyFile(path: string | null, content: string | undefined): boolean {
   if (!path) return false;
@@ -232,7 +237,17 @@ function isReadOnlyFile(path: string | null, content: string | undefined): boole
   return false;
 }
 
-function GitLog({ projekt, filePath }: { projekt: string; filePath: string }) {
+function GitLog({
+  projekt,
+  filePath,
+  activeSha,
+  onSelectSha,
+}: {
+  projekt: string;
+  filePath: string;
+  activeSha: string | null;
+  onSelectSha: (sha: string | null) => void;
+}) {
   const { data: commits } = useSWR<GitCommit[]>(
     `/api/projects/${projekt}/knowledge/gitlog?file=${encodeURIComponent(filePath)}`,
     fetcher,
@@ -242,17 +257,25 @@ function GitLog({ projekt, filePath }: { projekt: string; filePath: string }) {
   if (!commits?.length) return null;
 
   return (
-    <div className="border-t border-gray-800 px-4 py-3">
+    <div className="border-t border-gray-800 px-4 py-3 flex-shrink-0">
       <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Git log</p>
       <div className="space-y-1.5">
         {commits.slice(0, 5).map((c) => (
-          <div key={c.sha} className="flex items-start gap-2 text-xs">
-            <span className="text-gray-600 font-mono flex-shrink-0 mt-0.5">{c.sha}</span>
-            <span className="text-gray-400 flex-1 truncate">{c.message}</span>
+          <button
+            key={c.sha}
+            onClick={() => onSelectSha(activeSha === c.sha ? null : c.sha)}
+            className={`w-full flex items-start gap-2 text-xs text-left rounded px-1 py-0.5 transition-colors ${
+              activeSha === c.sha
+                ? "bg-blue-900/40 text-blue-300"
+                : "hover:bg-gray-800 text-gray-400"
+            }`}
+          >
+            <span className="font-mono flex-shrink-0 mt-0.5 text-gray-500">{c.sha}</span>
+            <span className="flex-1 truncate">{c.message}</span>
             <span className="text-gray-600 flex-shrink-0">
               {new Date(c.ts).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })}
             </span>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -269,10 +292,19 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [diffSha, setDiffSha] = useState<string | null>(null);
   const editorRef = useRef<{ getValue: () => string } | null>(null);
   const { data: fileData } = useSWR(
     selected ? `/api/projects/${projekt}/knowledge/file?path=${encodeURIComponent(selected)}` : null,
     fetcher
+  );
+
+  const { data: diffData } = useSWR<DiffData>(
+    selected && diffSha
+      ? `/api/projects/${projekt}/knowledge/gitdiff?file=${encodeURIComponent(selected)}&sha=${diffSha}`
+      : null,
+    fetcher,
+    { revalidateOnFocus: false }
   );
 
   const readOnly = isReadOnlyFile(selected, fileData?.content);
@@ -280,6 +312,7 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
   const handleSelect = useCallback((path: string) => {
     setSelected(path);
     setEditing(false);
+    setDiffSha(null);
   }, []);
 
   const handleEdit = useCallback(() => {
@@ -381,7 +414,7 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                       {saving ? "Ukládám..." : "Uložit"}
                     </button>
                   </>
-                ) : !readOnly ? (
+                ) : !readOnly && !diffSha ? (
                   <button
                     onClick={handleEdit}
                     className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 border border-gray-700 rounded-lg"
@@ -393,16 +426,53 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
             </div>
 
             {/* Banner pro chráněné soubory */}
-            {readOnly && (
+            {readOnly && !diffSha && (
               <div className="flex items-center gap-2 px-4 py-2 bg-yellow-950 border-b border-yellow-900 text-yellow-400 text-xs flex-shrink-0">
                 <span>🔒</span>
                 <span>Tento soubor je chráněný — read only</span>
               </div>
             )}
 
-            {/* Monaco */}
+            {/* Banner diff view */}
+            {diffSha && diffData && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-blue-950 border-b border-blue-900 text-blue-300 text-xs flex-shrink-0">
+                <span className="font-mono text-blue-400">{diffData.sha}</span>
+                <span className="flex-1 truncate">{diffData.message}</span>
+                <span className="text-blue-500">{diffData.author}</span>
+                <span className="text-blue-600">
+                  {new Date(diffData.ts).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            )}
+
+            {/* Editor / Diff */}
             <div className="flex-1 min-h-0">
-              {fileData ? (
+              {diffSha ? (
+                diffData ? (
+                  <MonacoDiffEditor
+                    height="100%"
+                    language="markdown"
+                    theme="vs-dark"
+                    original={diffData.original}
+                    modified={diffData.modified}
+                    options={{
+                      readOnly: true,
+                      renderSideBySide: true,
+                      minimap: { enabled: false },
+                      wordWrap: "on",
+                      lineNumbers: "off",
+                      folding: false,
+                      scrollBeyondLastLine: false,
+                      fontSize: 13,
+                      padding: { top: 12, bottom: 12 },
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-600 text-sm">
+                    Načítám diff...
+                  </div>
+                )
+              ) : fileData ? (
                 <MonacoEditor
                   height="100%"
                   language="markdown"
@@ -422,14 +492,24 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                   }}
                 />
               ) : (
-                <div className="flex items-center justify-center h-full text-gray-600 text-sm">
+                <div className="flex items items-center justify-center h-full text-gray-600 text-sm">
                   Načítám...
                 </div>
               )}
             </div>
 
             {/* Git log */}
-            {selected && <GitLog projekt={projekt} filePath={selected} />}
+            {selected && (
+              <GitLog
+                projekt={projekt}
+                filePath={selected}
+                activeSha={diffSha}
+                onSelectSha={(sha) => {
+                  setDiffSha(sha);
+                  if (sha) setEditing(false);
+                }}
+              />
+            )}
           </div>
         ) : (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-gray-600 text-sm text-center">
