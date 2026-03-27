@@ -490,9 +490,12 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                         theme="vs-dark"
                         original={diffData.original}
                         modified={diffData.modified}
+                        originalModelPath={`kb-original-${diffSha}.md`}
+                        modifiedModelPath={`kb-modified-${diffSha}.md`}
                         options={{
                           renderSideBySide: true,
                           ignoreTrimWhitespace: false,
+                          enableSplitViewResizing: false,
                           minimap: { enabled: false },
                           fontSize: 13,
                         }}
