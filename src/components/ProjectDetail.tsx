@@ -2,8 +2,11 @@
 
 import useSWR from "swr";
 import { useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import Chat from "@/components/Chat";
 import Link from "next/link";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -220,6 +223,42 @@ function Outputs({ projekt }: { projekt: string }) {
 
 // ── Knowledge Base ─────────────────────────────────────────────────────────
 
+type GitCommit = { sha: string; message: string; author: string; ts: string };
+
+function isReadOnlyFile(path: string | null, content: string | undefined): boolean {
+  if (!path) return false;
+  if (path.endsWith("_RULES.md")) return true;
+  if (content?.includes("<!-- IMMUTABLE_START -->")) return true;
+  return false;
+}
+
+function GitLog({ projekt, filePath }: { projekt: string; filePath: string }) {
+  const { data: commits } = useSWR<GitCommit[]>(
+    `/api/projects/${projekt}/knowledge/gitlog?file=${encodeURIComponent(filePath)}`,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+
+  if (!commits?.length) return null;
+
+  return (
+    <div className="border-t border-gray-800 px-4 py-3">
+      <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Git log</p>
+      <div className="space-y-1.5">
+        {commits.slice(0, 5).map((c) => (
+          <div key={c.sha} className="flex items-start gap-2 text-xs">
+            <span className="text-gray-600 font-mono flex-shrink-0 mt-0.5">{c.sha}</span>
+            <span className="text-gray-400 flex-1 truncate">{c.message}</span>
+            <span className="text-gray-600 flex-shrink-0">
+              {new Date(c.ts).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function KnowledgeBase({ projekt }: { projekt: string }) {
   const { data: tree, mutate } = useSWR<KBFile[]>(
     `/api/projects/${projekt}/knowledge/tree`,
@@ -229,11 +268,13 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
-
+  const [search, setSearch] = useState("");
   const { data: fileData } = useSWR(
     selected ? `/api/projects/${projekt}/knowledge/file?path=${encodeURIComponent(selected)}` : null,
     fetcher
   );
+
+  const readOnly = isReadOnlyFile(selected, fileData?.content);
 
   const handleSelect = useCallback((path: string) => {
     setSelected(path);
@@ -241,9 +282,10 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
   }, []);
 
   const handleEdit = useCallback(() => {
+    if (readOnly) return;
     setEditContent(fileData?.content ?? "");
     setEditing(true);
-  }, [fileData]);
+  }, [fileData, readOnly]);
 
   const handleSave = useCallback(async () => {
     if (!selected) return;
@@ -258,43 +300,66 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
     mutate();
   }, [selected, editContent, projekt, mutate]);
 
-  const grouped = (tree ?? []).reduce<Record<string, KBFile[]>>((acc, f) => {
+  // Filtrování souborů podle search query (jméno)
+  const filteredTree = (tree ?? []).filter((f) => {
+    if (!search.trim()) return true;
+    return f.name.toLowerCase().includes(search.toLowerCase()) ||
+           f.path.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const grouped = filteredTree.reduce<Record<string, KBFile[]>>((acc, f) => {
     (acc[f.kategorie] = acc[f.kategorie] || []).push(f);
     return acc;
   }, {});
 
   return (
-    <div className="flex gap-4">
-      {/* Strom */}
-      <div className="w-56 flex-shrink-0 space-y-4">
-        {Object.entries(grouped).map(([kat, files]) => (
-          <div key={kat}>
-            <p className="text-xs text-gray-600 uppercase tracking-wider mb-1 px-1">
-              {kat === "." ? "root" : kat}
+    <div className="flex gap-4 h-full">
+      {/* Strom + search */}
+      <div className="w-56 flex-shrink-0 flex flex-col gap-3">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Hledat soubor..."
+          className="w-full px-3 py-1.5 text-sm bg-gray-900 border border-gray-700 rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-500"
+        />
+        <div className="space-y-4 overflow-y-auto">
+          {Object.entries(grouped).map(([kat, files]) => (
+            <div key={kat}>
+              <p className="text-xs text-gray-600 uppercase tracking-wider mb-1 px-1">
+                {kat === "." ? "root" : kat}
+              </p>
+              {files.map((f) => {
+                const isRules = f.name === "_RULES.md";
+                return (
+                  <button
+                    key={f.path}
+                    onClick={() => handleSelect(f.path)}
+                    className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1.5 ${
+                      selected === f.path ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-900"
+                    }`}
+                  >
+                    {isRules && <span className="flex-shrink-0 text-xs">🔒</span>}
+                    <span className="truncate">{f.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+          {!filteredTree.length && (
+            <p className="text-gray-600 text-sm px-1">
+              {search ? "Žádné výsledky" : "Prázdná knowledge base"}
             </p>
-            {files.map((f) => (
-              <button
-                key={f.path}
-                onClick={() => handleSelect(f.path)}
-                className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors truncate ${
-                  selected === f.path ? "bg-gray-800 text-white" : "text-gray-400 hover:bg-gray-900"
-                }`}
-              >
-                {f.name}
-              </button>
-            ))}
-          </div>
-        ))}
-        {!tree?.length && (
-          <p className="text-gray-600 text-sm px-1">Prázdná knowledge base</p>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Editor / prohlížeč */}
+      {/* Editor */}
       <div className="flex-1 min-w-0">
         {selected ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col" style={{ height: "75vh" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 flex-shrink-0">
               <span className="text-xs text-gray-500 truncate">{selected}</span>
               <div className="flex gap-2 flex-shrink-0">
                 {editing ? (
@@ -313,28 +378,55 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                       {saving ? "Ukládám..." : "Uložit"}
                     </button>
                   </>
-                ) : (
+                ) : !readOnly ? (
                   <button
                     onClick={handleEdit}
                     className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 border border-gray-700 rounded-lg"
                   >
                     Upravit
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
-            {editing ? (
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="w-full h-[65vh] bg-gray-900 text-sm text-gray-200 font-mono p-4 resize-none focus:outline-none"
-                spellCheck={false}
-              />
-            ) : (
-              <pre className="text-sm text-gray-300 whitespace-pre-wrap p-4 overflow-auto max-h-[65vh]">
-                {fileData?.content ?? "Načítám..."}
-              </pre>
+
+            {/* Banner pro chráněné soubory */}
+            {readOnly && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-yellow-950 border-b border-yellow-900 text-yellow-400 text-xs flex-shrink-0">
+                <span>🔒</span>
+                <span>Tento soubor je chráněný — read only</span>
+              </div>
             )}
+
+            {/* Monaco */}
+            <div className="flex-1 min-h-0">
+              {fileData ? (
+                <MonacoEditor
+                  height="100%"
+                  language="markdown"
+                  theme="vs-dark"
+                  value={editing ? editContent : (fileData.content ?? "")}
+                  onChange={(val) => { if (editing) setEditContent(val ?? ""); }}
+                  options={{
+                    readOnly: readOnly || !editing,
+                    minimap: { enabled: false },
+                    wordWrap: "on",
+                    lineNumbers: "off",
+                    folding: false,
+                    renderLineHighlight: "none",
+                    scrollBeyondLastLine: false,
+                    fontSize: 13,
+                    padding: { top: 12, bottom: 12 },
+                  }}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-600 text-sm">
+                  Načítám...
+                </div>
+              )}
+            </div>
+
+            {/* Git log */}
+            {selected && <GitLog projekt={projekt} filePath={selected} />}
           </div>
         ) : (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-gray-600 text-sm text-center">
