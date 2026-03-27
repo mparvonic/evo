@@ -491,15 +491,10 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                         original={diffData.original}
                         modified={diffData.modified}
                         options={{
-                          readOnly: true,
                           renderSideBySide: true,
+                          ignoreTrimWhitespace: false,
                           minimap: { enabled: false },
-                          wordWrap: "on",
-                          lineNumbers: "off",
-                          folding: false,
-                          scrollBeyondLastLine: false,
                           fontSize: 13,
-                          padding: { top: 12, bottom: 12 },
                         }}
                       />
                     </div>
