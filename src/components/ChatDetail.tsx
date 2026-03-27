@@ -123,7 +123,7 @@ function ConversationTab({ chatId, meta, onSaved, model }: {
     } finally {
       setStreaming(false);
     }
-  }, [chatId, input, streaming]);
+  }, [chatId, input, streaming, model]);
 
   async function handleSaveOutput(content: string, msgId: string) {
     setSaving(msgId);
