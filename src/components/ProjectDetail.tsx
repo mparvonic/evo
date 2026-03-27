@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Chat from "@/components/Chat";
 import Link from "next/link";
@@ -227,7 +227,7 @@ type GitCommit = { sha: string; message: string; author: string; ts: string };
 
 function isReadOnlyFile(path: string | null, content: string | undefined): boolean {
   if (!path) return false;
-  if (path.endsWith("_RULES.md")) return true;
+  if (path.endsWith("_RULES.md") || path.endsWith("_RULES")) return true;
   if (content?.includes("<!-- IMMUTABLE_START -->")) return true;
   return false;
 }
@@ -269,6 +269,7 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const editorRef = useRef<{ getValue: () => string } | null>(null);
   const { data: fileData } = useSWR(
     selected ? `/api/projects/${projekt}/knowledge/file?path=${encodeURIComponent(selected)}` : null,
     fetcher
@@ -289,11 +290,13 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
 
   const handleSave = useCallback(async () => {
     if (!selected) return;
+    // Čteme obsah přímo z Monaco editoru, ne ze state (stale closure workaround)
+    const obsah = editorRef.current?.getValue() ?? editContent;
     setSaving(true);
     await fetch(`/api/projects/${projekt}/knowledge/file?path=${encodeURIComponent(selected)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ obsah: editContent, commit_msg: `edit: ${selected}` }),
+      body: JSON.stringify({ obsah, commit_msg: `edit: ${selected}` }),
     });
     setSaving(false);
     setEditing(false);
@@ -330,7 +333,7 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                 {kat === "." ? "root" : kat}
               </p>
               {files.map((f) => {
-                const isRules = f.name === "_RULES.md";
+                const isRules = f.name === "_RULES" || f.path.endsWith("_RULES.md");
                 return (
                   <button
                     key={f.path}
@@ -405,7 +408,7 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                   language="markdown"
                   theme="vs-dark"
                   value={editing ? editContent : (fileData.content ?? "")}
-                  onChange={(val) => { if (editing) setEditContent(val ?? ""); }}
+                  onMount={(editor) => { editorRef.current = editor; }}
                   options={{
                     readOnly: readOnly || !editing,
                     minimap: { enabled: false },
