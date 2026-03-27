@@ -273,7 +273,7 @@ function GitLog({
             <span className="font-mono flex-shrink-0 mt-0.5 text-gray-500">{c.sha}</span>
             <span className="flex-1 truncate">{c.message}</span>
             <span className="text-gray-600 flex-shrink-0">
-              {new Date(c.ts).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" })}
+              {new Date(c.ts).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}
             </span>
           </button>
         ))}
@@ -421,7 +421,14 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                       {saving ? "Ukládám..." : "Uložit"}
                     </button>
                   </>
-                ) : !readOnly && !diffSha ? (
+                ) : diffSha ? (
+                  <button
+                    onClick={() => setDiffSha(null)}
+                    className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 border border-gray-700 rounded-lg"
+                  >
+                    ✕ Zavřít diff
+                  </button>
+                ) : !readOnly ? (
                   <button
                     onClick={handleEdit}
                     className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 border border-gray-700 rounded-lg"
@@ -462,27 +469,41 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
             )}
 
             {/* Editor / Diff */}
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 flex flex-col">
               {diffSha ? (
                 diffData ? (
-                  <MonacoDiffEditor
-                    height="100%"
-                    language="markdown"
-                    theme="vs-dark"
-                    original={diffData.original}
-                    modified={diffData.modified}
-                    options={{
-                      readOnly: true,
-                      renderSideBySide: true,
-                      minimap: { enabled: false },
-                      wordWrap: "on",
-                      lineNumbers: "off",
-                      folding: false,
-                      scrollBeyondLastLine: false,
-                      fontSize: 13,
-                      padding: { top: 12, bottom: 12 },
-                    }}
-                  />
+                  <>
+                    {/* Nadpisy oken */}
+                    <div className="flex flex-shrink-0 border-b border-gray-800 text-xs text-gray-500">
+                      <div className="flex-1 px-4 py-1.5 border-r border-gray-800">
+                        před · {diffData.sha} · {new Date(diffData.ts).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                      <div className="flex-1 px-4 py-1.5 text-gray-400">
+                        po · {diffData.sha} · {diffData.message}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <MonacoDiffEditor
+                        key={diffSha}
+                        height="100%"
+                        language="markdown"
+                        theme="vs-dark"
+                        original={diffData.original}
+                        modified={diffData.modified}
+                        options={{
+                          readOnly: true,
+                          renderSideBySide: true,
+                          minimap: { enabled: false },
+                          wordWrap: "on",
+                          lineNumbers: "off",
+                          folding: false,
+                          scrollBeyondLastLine: false,
+                          fontSize: 13,
+                          padding: { top: 12, bottom: 12 },
+                        }}
+                      />
+                    </div>
+                  </>
                 ) : (
                   <div className="flex items-center justify-center h-full text-gray-600 text-sm">
                     Načítám diff...
