@@ -7,10 +7,87 @@ import Chat from "@/components/Chat";
 import Link from "next/link";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
-const MonacoDiffEditor = dynamic(
-  () => import("@monaco-editor/react").then((m) => ({ default: m.DiffEditor })),
-  { ssr: false }
-);
+
+// ── Vlastní diff renderer (LCS line-level) ──────────────────────────────────
+
+type DiffOp = { type: "same" | "del" | "add"; text: string };
+
+function computeDiff(original: string, modified: string): DiffOp[] {
+  const a = (original || "").split("\n");
+  const b = (modified || "").split("\n");
+  const n = a.length, m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = 1; i <= n; i++)
+    for (let j = 1; j <= m; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+  const ops: DiffOp[] = [];
+  let i = n, j = m;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+      ops.unshift({ type: "same", text: a[i-1] }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.unshift({ type: "add",  text: b[j-1] }); j--;
+    } else {
+      ops.unshift({ type: "del",  text: a[i-1] }); i--;
+    }
+  }
+  return ops;
+}
+
+type DiffRow = { left: { text: string; type: "same" | "del" | "empty" }; right: { text: string; type: "same" | "add" | "empty" } };
+
+function buildRows(ops: DiffOp[]): DiffRow[] {
+  const rows: DiffRow[] = [];
+  let di = 0;
+  while (di < ops.length) {
+    const op = ops[di];
+    if (op.type === "same") {
+      rows.push({ left: { text: op.text, type: "same" }, right: { text: op.text, type: "same" } });
+      di++;
+    } else if (op.type === "del" && di + 1 < ops.length && ops[di + 1].type === "add") {
+      rows.push({ left: { text: op.text, type: "del" }, right: { text: ops[di+1].text, type: "add" } });
+      di += 2;
+    } else if (op.type === "del") {
+      rows.push({ left: { text: op.text, type: "del" }, right: { text: "", type: "empty" } });
+      di++;
+    } else {
+      rows.push({ left: { text: "", type: "empty" }, right: { text: op.text, type: "add" } });
+      di++;
+    }
+  }
+  return rows;
+}
+
+const CELL_STYLE: Record<string, string> = {
+  same:  "text-gray-300",
+  del:   "bg-red-950 text-red-200 border-l-2 border-red-600",
+  add:   "bg-green-950 text-green-200 border-l-2 border-green-600",
+  empty: "bg-gray-900/40 text-transparent select-none",
+};
+
+function SideBySideDiff({ original, modified }: { original: string; modified: string }) {
+  const rows = buildRows(computeDiff(original, modified));
+  return (
+    <div className="flex h-full overflow-auto font-mono text-xs">
+      <div className="flex-1 min-w-0 border-r border-gray-800 overflow-auto">
+        {rows.map((r, i) => (
+          <div key={i} className={`px-3 py-0.5 whitespace-pre-wrap leading-5 ${CELL_STYLE[r.left.type]}`}>
+            {r.left.type === "del" && <span className="text-red-500 mr-1 select-none">−</span>}
+            {r.left.text || "\u00a0"}
+          </div>
+        ))}
+      </div>
+      <div className="flex-1 min-w-0 overflow-auto">
+        {rows.map((r, i) => (
+          <div key={i} className={`px-3 py-0.5 whitespace-pre-wrap leading-5 ${CELL_STYLE[r.right.type]}`}>
+            {r.right.type === "add" && <span className="text-green-500 mr-1 select-none">+</span>}
+            {r.right.text || "\u00a0"}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -482,24 +559,8 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                         po · {diffData.sha} · {diffData.message}
                       </div>
                     </div>
-                    <div className="flex-1 min-h-0">
-                      <MonacoDiffEditor
-                        key={diffSha}
-                        height="100%"
-                        language="markdown"
-                        theme="vs-dark"
-                        original={diffData.original}
-                        modified={diffData.modified}
-                        originalModelPath={`kb-original-${diffSha}.md`}
-                        modifiedModelPath={`kb-modified-${diffSha}.md`}
-                        options={{
-                          renderSideBySide: true,
-                          ignoreTrimWhitespace: false,
-                          enableSplitViewResizing: false,
-                          minimap: { enabled: false },
-                          fontSize: 13,
-                        }}
-                      />
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <SideBySideDiff original={diffData.original} modified={diffData.modified} />
                     </div>
                   </>
                 ) : (
