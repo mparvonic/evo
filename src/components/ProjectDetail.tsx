@@ -9,7 +9,6 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type KBFile = { path: string; kategorie: string; name: string; size: number; modified: number };
 type OutputFile = { name: string; size: number; modified: number };
-type LogData = { lines: string[] };
 
 export default function ProjectDetail({ projekt }: { projekt: string }) {
   const [section, setSection] = useState<"tasks" | "outputs" | "kb">("tasks");
@@ -62,56 +61,98 @@ export default function ProjectDetail({ projekt }: { projekt: string }) {
 
 // ── Tasky ──────────────────────────────────────────────────────────────────
 
+type FlowRun = {
+  id: string;
+  name: string;
+  task_id: string;
+  mode: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_s: number | null;
+};
+
+const STATUS_STYLE: Record<string, string> = {
+  COMPLETED: "text-green-400",
+  RUNNING:   "text-blue-400",
+  FAILED:    "text-red-400",
+  CRASHED:   "text-red-500",
+  CANCELLED: "text-gray-500",
+  PENDING:   "text-yellow-400",
+  UNKNOWN:   "text-gray-500",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  COMPLETED: "hotovo",
+  RUNNING:   "běží",
+  FAILED:    "chyba",
+  CRASHED:   "crash",
+  CANCELLED: "zrušeno",
+  PENDING:   "čeká",
+  UNKNOWN:   "?",
+};
+
+function fmtDuration(s: number | null) {
+  if (s === null) return "";
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+}
+
 function Tasks({ projekt }: { projekt: string }) {
-  const { data: log, isLoading } = useSWR<LogData>(
-    `/api/projects/${projekt}/tasks/log?lines=200`,
+  const { data: tasks, isLoading } = useSWR<FlowRun[]>(
+    `/api/projects/${projekt}/tasks`,
     fetcher,
-    { refreshInterval: 5000 }
+    { refreshInterval: 8000 }
   );
-  const { data: project } = useSWR(`/api/projects/${projekt}`, fetcher, { refreshInterval: 10000 });
-  const [expanded, setExpanded] = useState(false);
 
-  const isRunning = project?.has_running_task;
-  const lines = log?.lines ?? [];
-
-  // Parsuj tasky z logu (hledá řádky začínající časem nebo označením agenta)
-  const taskLines = lines.filter(l => l.trim());
-  const preview = taskLines.slice(-20);
-  const all = taskLines;
+  const running = tasks?.filter((t) => t.status === "RUNNING") ?? [];
 
   return (
     <div className="space-y-4">
       {/* Status */}
       <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
-        isRunning
+        running.length > 0
           ? "bg-green-950 border-green-800 text-green-300"
           : "bg-gray-900 border-gray-800 text-gray-400"
       }`}>
-        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isRunning ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
-        <span className="text-sm font-medium">{isRunning ? "Task běží" : "Žádný aktivní task"}</span>
+        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${running.length > 0 ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
+        <span className="text-sm font-medium">
+          {running.length > 0 ? `${running.length} task${running.length > 1 ? "y" : ""} běží` : "Žádný aktivní task"}
+        </span>
       </div>
 
-      {/* Log */}
+      {/* Seznam */}
       {isLoading ? (
         <p className="text-gray-600 text-sm">Načítám...</p>
-      ) : lines.length === 0 ? (
+      ) : !tasks?.length ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 text-center text-gray-600 text-sm">
-          Žádné záznamy. Spusť task přes Telegram bot.
+          Žádné tasky. Spusť task přes Telegram bot.
         </div>
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800">
-            <span className="text-xs text-gray-500 font-medium uppercase tracking-wider">crew_log.txt</span>
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-xs text-gray-600 hover:text-gray-400"
-            >
-              {expanded ? "méně" : "vše"}
-            </button>
+          <div className="px-4 py-2 border-b border-gray-800">
+            <span className="text-xs text-gray-500 font-medium uppercase tracking-wider">Prefect flow runs</span>
           </div>
-          <pre className="text-xs font-mono text-gray-300 p-4 overflow-auto max-h-[60vh] whitespace-pre-wrap">
-            {(expanded ? all : preview).join("\n")}
-          </pre>
+          <div className="divide-y divide-gray-800">
+            {tasks.map((t) => (
+              <Link
+                key={t.id}
+                href={`/dashboard/project/${projekt}/task/${t.id}`}
+                className="flex items-center gap-4 px-4 py-3 hover:bg-gray-800 transition-colors"
+              >
+                <span className={`text-xs font-medium w-14 flex-shrink-0 ${STATUS_STYLE[t.status] ?? "text-gray-500"}`}>
+                  {STATUS_LABEL[t.status] ?? t.status}
+                </span>
+                <span className="flex-1 text-sm text-gray-300 truncate">{t.task_id || t.name}</span>
+                {t.mode !== "full" && (
+                  <span className="text-xs text-yellow-600 flex-shrink-0">{t.mode}</span>
+                )}
+                <span className="text-xs text-gray-600 flex-shrink-0">
+                  {t.duration_s !== null ? fmtDuration(t.duration_s) : t.started_at ? new Date(t.started_at).toLocaleString("cs-CZ", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                </span>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>
