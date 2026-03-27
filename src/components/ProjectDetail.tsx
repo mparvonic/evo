@@ -321,20 +321,27 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
     setEditing(true);
   }, [fileData, readOnly]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (obsahOverride?: string, commitMsgOverride?: string) => {
     if (!selected) return;
-    // Čteme obsah přímo z Monaco editoru, ne ze state (stale closure workaround)
-    const obsah = editorRef.current?.getValue() ?? editContent;
+    const obsah = obsahOverride ?? editorRef.current?.getValue() ?? editContent;
+    const commit_msg = commitMsgOverride ?? `edit: ${selected}`;
     setSaving(true);
     await fetch(`/api/projects/${projekt}/knowledge/file?path=${encodeURIComponent(selected)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ obsah, commit_msg: `edit: ${selected}` }),
+      body: JSON.stringify({ obsah, commit_msg }),
     });
     setSaving(false);
     setEditing(false);
     mutate();
   }, [selected, editContent, projekt, mutate]);
+
+  const handleRevert = useCallback(async () => {
+    if (!diffData || !selected) return;
+    await handleSave(diffData.modified, `revert: [${diffData.sha}] ${selected}`);
+    setDiffSha(null);
+    mutate();
+  }, [diffData, selected, handleSave, mutate]);
 
   // Filtrování souborů podle search query (jméno)
   const filteredTree = (tree ?? []).filter((f) => {
@@ -438,10 +445,19 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
               <div className="flex items-center gap-3 px-4 py-2 bg-blue-950 border-b border-blue-900 text-blue-300 text-xs flex-shrink-0">
                 <span className="font-mono text-blue-400">{diffData.sha}</span>
                 <span className="flex-1 truncate">{diffData.message}</span>
-                <span className="text-blue-500">{diffData.author}</span>
-                <span className="text-blue-600">
+                <span className="text-blue-500 flex-shrink-0">{diffData.author}</span>
+                <span className="text-blue-600 flex-shrink-0">
                   {new Date(diffData.ts).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}
                 </span>
+                {!readOnly && (
+                  <button
+                    onClick={handleRevert}
+                    disabled={saving}
+                    className="flex-shrink-0 px-2 py-0.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white rounded text-xs transition-colors"
+                  >
+                    {saving ? "Obnovuji..." : "Obnovit tuto verzi"}
+                  </button>
+                )}
               </div>
             )}
 
