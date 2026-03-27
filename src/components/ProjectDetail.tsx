@@ -304,6 +304,7 @@ function Outputs({ projekt }: { projekt: string }) {
 
 // ── Knowledge Base ─────────────────────────────────────────────────────────
 
+type IndexStatus = { needs_reindex: boolean; changed_files: number; last_indexed: string | null };
 type GitCommit = { sha: string; message: string; author: string; ts: string };
 type DiffData = { original: string; modified: string; sha: string; message: string; author: string; ts: string };
 
@@ -364,12 +365,18 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
     `/api/projects/${projekt}/knowledge/tree`,
     fetcher
   );
+  const { data: indexStatus, mutate: mutateIndex } = useSWR<IndexStatus>(
+    `/api/projects/${projekt}/knowledge/index_status`,
+    fetcher,
+    { refreshInterval: 30000 }
+  );
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [diffSha, setDiffSha] = useState<string | null>(null);
+  const [reindexing, setReindexing] = useState(false);
   const editorRef = useRef<{ getValue: () => string } | null>(null);
   const { data: fileData } = useSWR(
     selected ? `/api/projects/${projekt}/knowledge/file?path=${encodeURIComponent(selected)}` : null,
@@ -420,6 +427,23 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
     mutate();
   }, [diffData, selected, handleSave, mutate]);
 
+  const handleReindex = useCallback(async () => {
+    setReindexing(true);
+    await fetch(`/api/projects/${projekt}/knowledge/reindex`, { method: "POST" });
+    // Počkej na dokončení indexace (polling)
+    const poll = async () => {
+      await new Promise(r => setTimeout(r, 3000));
+      await mutateIndex();
+      const status = await fetch(`/api/projects/${projekt}/knowledge/index_status`).then(r => r.json());
+      if (status.needs_reindex) {
+        setTimeout(poll, 3000);
+      } else {
+        setReindexing(false);
+      }
+    };
+    poll();
+  }, [projekt, mutateIndex]);
+
   // Filtrování souborů podle search query (jméno)
   const filteredTree = (tree ?? []).filter((f) => {
     if (!search.trim()) return true;
@@ -443,6 +467,17 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
           placeholder="Hledat soubor..."
           className="w-full px-3 py-1.5 text-sm bg-gray-900 border border-gray-700 rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-500"
         />
+        {(indexStatus?.needs_reindex || reindexing) && (
+          <button
+            onClick={handleReindex}
+            disabled={reindexing}
+            className="w-full px-3 py-1.5 text-xs rounded-lg transition-colors disabled:opacity-60 bg-orange-900 hover:bg-orange-800 text-orange-200 border border-orange-700"
+          >
+            {reindexing
+              ? "Indexuji..."
+              : `Reindexovat (${indexStatus?.changed_files} změn)`}
+          </button>
+        )}
         <div className="space-y-4 overflow-y-auto">
           {Object.entries(grouped).map(([kat, files]) => (
             <div key={kat}>
