@@ -1,0 +1,39 @@
+{
+  "name": "EVO Dashboard",
+  "short_name": "EVO",
+  "description": "EVO-X2 AI infrastruktura — projekty, chaty, monitoring",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "orientation": "portrait-primary",
+  "lang": "cs",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chaty",
+      "short_name": "Chaty",
+      "url": "/dashboard/chats",
+      "description": "Volné konverzace s EVO"
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Projekty",
+      "url": "/dashboard",
+      "description": "Přehled projektů"
+    }
+  ]
+}
