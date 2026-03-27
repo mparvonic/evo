@@ -34,12 +34,19 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
 }
 
+const CHAT_MODELS = [
+  { id: "evo-executor", label: "qwen2.5:72b", desc: "výchozí · lokální" },
+  { id: "evo-chat",     label: "llama3.3:70b", desc: "kvalitní · lokální" },
+  { id: "claude-sonnet", label: "claude-sonnet", desc: "nejlepší · cloud" },
+] as const;
+
 // ── Záložka: Konverzace ────────────────────────────────────────────────────────
 
-function ConversationTab({ chatId, meta, onSaved }: {
+function ConversationTab({ chatId, meta, onSaved, model }: {
   chatId: string;
   meta: ChatMeta;
   onSaved: () => void;
+  model: string;
 }) {
   const [messages, setMessages] = useState<Message[]>(meta.messages);
   const [input, setInput] = useState("");
@@ -72,7 +79,7 @@ function ConversationTab({ chatId, meta, onSaved }: {
       const res = await fetch(`/api/chats/${chatId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({ content: text, model }),
       });
 
       if (!res.body) throw new Error("Žádný stream");
@@ -349,6 +356,7 @@ function TasksTab() {
 export default function ChatDetail({ chatId }: { chatId: string }) {
   const { data: meta, mutate } = useSWR<ChatMeta>(`/api/chats/${chatId}`, fetcher);
   const [tab, setTab] = useState<"konverzace" | "vystupy" | "tasky">("konverzace");
+  const [selectedModel, setSelectedModel] = useState("evo-executor");
 
   if (!meta) {
     return (
@@ -381,6 +389,18 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
             ))}
           </div>
         )}
+        {/* Model selector */}
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded-lg px-2 py-1.5 outline-none hover:border-gray-500 transition-colors"
+        >
+          {CHAT_MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label} — {m.desc}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Záložky */}
@@ -403,7 +423,7 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
       {/* Obsah záložky */}
       <div className="flex-1 overflow-hidden">
         {tab === "konverzace" && (
-          <ConversationTab chatId={chatId} meta={meta} onSaved={() => mutate()} />
+          <ConversationTab chatId={chatId} meta={meta} onSaved={() => mutate()} model={selectedModel} />
         )}
         {tab === "vystupy" && (
           <div className="h-full overflow-y-auto">
