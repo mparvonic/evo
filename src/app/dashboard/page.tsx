@@ -19,6 +19,7 @@ export default async function DashboardPage() {
             </p>
           </div>
           <nav className="flex items-center gap-4 text-sm">
+            <Link href="/dashboard/chats" className="text-gray-300 hover:text-white">Chaty</Link>
             <Link href="/legai" className="text-blue-400 hover:text-blue-300">/legai</Link>
             <form action="/api/auth/signout" method="POST">
               <button className="text-gray-500 hover:text-gray-300">Odhlásit</button>
