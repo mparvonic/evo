@@ -420,11 +420,6 @@ export default function ChatDetail({ chatId }: { chatId: string }) {
             <option value="claude-haiku">Claude Haiku — cloud</option>
             <option value="claude-sonnet">Claude Sonnet — cloud</option>
             <option value="claude-opus">Claude Opus — cloud</option>
-            <option value="gpt-4o-mini">GPT-4o mini — cloud</option>
-            <option value="gpt-4o">GPT-4o — cloud</option>
-            <option value="gpt-5">GPT-5 — cloud</option>
-            <option value="o3-mini">o3-mini — reasoning</option>
-            <option value="o4-mini">o4-mini — reasoning</option>
             <option value="gemini-2.0-flash">Gemini 2.0 Flash — cloud</option>
             <option value="gemini-2.5-pro">Gemini 2.5 Pro — cloud</option>
           </select>

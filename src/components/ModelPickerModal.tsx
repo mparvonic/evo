@@ -25,11 +25,10 @@ function Dots({ value, color }: { value: number; color: string }) {
   );
 }
 
-const PROVIDER_ORDER = ["local", "anthropic", "openai", "google"] as const;
+const PROVIDER_ORDER = ["local", "anthropic", "google"] as const;
 const PROVIDER_LABELS: Record<string, string> = {
   local: "Lokální (Ollama)",
   anthropic: "Anthropic",
-  openai: "OpenAI",
   google: "Google",
 };
 
