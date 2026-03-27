@@ -414,7 +414,7 @@ function KnowledgeBase({ projekt }: { projekt: string }) {
                       Zrušit
                     </button>
                     <button
-                      onClick={handleSave}
+                      onClick={() => handleSave()}
                       disabled={saving}
                       className="text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1 rounded-lg"
                     >
