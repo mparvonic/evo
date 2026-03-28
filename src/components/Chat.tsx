@@ -10,9 +10,18 @@ function getWsUrl() {
   return `${proto}//${window.location.host}/api/chat`;
 }
 
-export default function Chat({ projekt }: { projekt: string }) {
+type ChatProps = {
+  projekt: string;
+  inputValue?: string;
+  onInputChange?: (v: string) => void;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+};
+
+export default function Chat({ projekt, inputValue, onInputChange, inputRef }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [internalInput, setInternalInput] = useState("");
+  const input = inputValue !== undefined ? inputValue : internalInput;
+  const setInput = onInputChange ?? setInternalInput;
   const [streaming, setStreaming] = useState(false);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -100,6 +109,7 @@ export default function Chat({ projekt }: { projekt: string }) {
       {/* Input */}
       <div className="p-2 border-t border-gray-800 flex gap-2">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
