@@ -19,6 +19,7 @@ type ChatProps = {
 
 export default function Chat({ projekt, inputValue, onInputChange, inputRef }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [internalInput, setInternalInput] = useState("");
   const input = inputValue !== undefined ? inputValue : internalInput;
   const setInput = onInputChange ?? setInternalInput;
@@ -59,6 +60,16 @@ export default function Chat({ projekt, inputValue, onInputChange, inputRef }: C
   }, []);
 
   useEffect(() => {
+    fetch(`/api/projects/${projekt}/conversations?limit=100`)
+      .then((r) => r.json())
+      .then((data: Array<{ role: string; content: string }>) => {
+        setMessages(data.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })));
+      })
+      .catch(() => {})
+      .finally(() => setHistoryLoaded(true));
+  }, [projekt]);
+
+  useEffect(() => {
     connect();
     return () => wsRef.current?.close();
   }, [connect]);
@@ -87,7 +98,7 @@ export default function Chat({ projekt, inputValue, onInputChange, inputRef }: C
 
       {/* Zprávy */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {messages.length === 0 && (
+        {historyLoaded && messages.length === 0 && (
           <p className="text-gray-700 text-xs text-center mt-6">
             Zeptejte se na cokoliv o projektu <strong className="text-gray-500">{projekt}</strong>
           </p>
