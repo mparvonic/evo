@@ -7,6 +7,18 @@ import { useState } from "react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+function formatTaskTs(updated_at?: string | number, created_at?: string | number): string {
+  const raw = updated_at ?? created_at;
+  if (!raw) return "";
+  // updated_at přichází jako Unix timestamp (číslo), created_at jako ISO string
+  const d = typeof raw === "number" ? new Date(raw * 1000) : new Date(raw);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 type Task = {
   task_id: string;
   zadani?: string;
@@ -138,9 +150,9 @@ function TaskRow({ task, projekt }: { task: Task; projekt: string }) {
         {task.zadani || task.task_id}
       </span>
       <span className="text-xs text-gray-700 font-mono flex-shrink-0">{task.task_id.slice(0, 8)}</span>
-      {task.updated_at && (
+      {(task.updated_at || task.created_at) && (
         <span className="text-xs text-gray-600 flex-shrink-0">
-          {new Date(task.updated_at).toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}
+          {formatTaskTs(task.updated_at, task.created_at)}
         </span>
       )}
     </Link>

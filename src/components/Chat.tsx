@@ -2,12 +2,22 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { role: "user" | "assistant"; content: string; ts?: string };
 
 function getWsUrl() {
   if (typeof window === "undefined") return "";
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${window.location.host}/api/chat`;
+}
+
+function formatTs(ts: string | undefined): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 type ChatProps = {
@@ -49,10 +59,18 @@ export default function Chat({ projekt, inputValue, onInputChange, inputRef }: C
           return [...prev, { role: "assistant", content: streamBuf.current }];
         });
       } else if (msg.type === "done") {
+        // Přidej timestamp na právě dokončenou zprávu
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant" && !last.ts) {
+            return [...prev.slice(0, -1), { ...last, ts: new Date().toISOString() }];
+          }
+          return prev;
+        });
         setStreaming(false);
         streamBuf.current = "";
       } else if (msg.type === "error") {
-        setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${msg.content}` }]);
+        setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${msg.content}`, ts: new Date().toISOString() }]);
         setStreaming(false);
         streamBuf.current = "";
       }
@@ -62,8 +80,8 @@ export default function Chat({ projekt, inputValue, onInputChange, inputRef }: C
   useEffect(() => {
     fetch(`/api/projects/${projekt}/conversations?limit=100`)
       .then((r) => r.json())
-      .then((data: Array<{ role: string; content: string }>) => {
-        setMessages(data.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })));
+      .then((data: Array<{ role: string; content: string; ts?: string }>) => {
+        setMessages(data.map((m) => ({ role: m.role as "user" | "assistant", content: m.content, ts: m.ts })));
       })
       .catch(() => {})
       .finally(() => setHistoryLoaded(true));
@@ -83,7 +101,7 @@ export default function Chat({ projekt, inputValue, onInputChange, inputRef }: C
     const text = input.trim();
     setInput("");
     streamBuf.current = "";
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setMessages((prev) => [...prev, { role: "user", content: text, ts: new Date().toISOString() }]);
     setStreaming(true);
     wsRef.current!.send(JSON.stringify({ projekt, zprava: text }));
   }
@@ -104,7 +122,7 @@ export default function Chat({ projekt, inputValue, onInputChange, inputRef }: C
           </p>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
             <div
               className={`max-w-[90%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${
                 m.role === "user" ? "bg-blue-700 text-white" : "bg-gray-800 text-gray-200"
@@ -112,6 +130,9 @@ export default function Chat({ projekt, inputValue, onInputChange, inputRef }: C
             >
               {m.content}
             </div>
+            {m.ts && (
+              <span className="text-xs text-gray-700 mt-0.5 px-1">{formatTs(m.ts)}</span>
+            )}
           </div>
         ))}
         <div ref={bottomRef} />
