@@ -6,14 +6,14 @@ import Link from "next/link";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type Stats = {
-  cpu?: number;
-  ram?: number;
-  gpu?: number;
+  cpu?: { pct: number; cores: number };
+  ram?: { total: number; used: number; pct: number };
+  gpu?: { used: number; total: number; pct: number };
   active_tasks?: number;
   tasks_waiting_approval?: number;
   langfuse_url?: string;
   prefect_url?: string;
-  ollama_models?: string[];
+  ollama_models?: Array<{ name: string; size: number }>;
 };
 
 type Project = { id: string; name: string };
@@ -117,12 +117,12 @@ export default function DashboardOverview() {
         />
         <StatCard
           label="CPU"
-          value={stats?.cpu !== undefined ? `${stats.cpu}%` : "—"}
+          value={stats?.cpu !== undefined ? `${stats.cpu.pct}%` : "—"}
         />
         <StatCard
           label="RAM"
-          value={stats?.ram !== undefined ? `${stats.ram} GB` : "—"}
-          sub={stats?.gpu !== undefined ? `GPU ${stats.gpu}%` : undefined}
+          value={stats?.ram !== undefined ? `${Math.round(stats.ram.used / 1024 ** 3)} GB` : "—"}
+          sub={stats?.gpu !== undefined ? `GPU ${stats.gpu.pct}%` : undefined}
         />
       </div>
 
@@ -179,8 +179,8 @@ export default function DashboardOverview() {
           <p className="text-xs text-gray-600 mb-2">Ollama modely</p>
           <div className="flex flex-wrap gap-2">
             {stats.ollama_models.map((m) => (
-              <span key={m} className="text-xs bg-gray-900 border border-gray-800 text-gray-400 px-2 py-1 rounded">
-                {m}
+              <span key={m.name} className="text-xs bg-gray-900 border border-gray-800 text-gray-400 px-2 py-1 rounded">
+                {m.name}
               </span>
             ))}
           </div>

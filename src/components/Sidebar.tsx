@@ -7,7 +7,12 @@ import { usePathname } from "next/navigation";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type Project = { id: string; name: string };
-type Stats = { active_tasks?: number; tasks_waiting_approval?: number; cpu?: number; ram?: number };
+type Stats = {
+  active_tasks?: number;
+  tasks_waiting_approval?: number;
+  cpu?: { pct: number; cores: number };
+  ram?: { total: number; used: number; pct: number };
+};
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -93,13 +98,13 @@ export default function Sidebar() {
           {stats.cpu !== undefined && (
             <div className="flex justify-between text-xs">
               <span className="text-gray-500">CPU</span>
-              <span className="text-gray-400">{stats.cpu}%</span>
+              <span className="text-gray-400">{stats.cpu.pct}%</span>
             </div>
           )}
           {stats.ram !== undefined && (
             <div className="flex justify-between text-xs">
               <span className="text-gray-500">RAM</span>
-              <span className="text-gray-400">{stats.ram} GB</span>
+              <span className="text-gray-400">{Math.round(stats.ram.used / 1024 ** 3)} GB</span>
             </div>
           )}
         </div>
