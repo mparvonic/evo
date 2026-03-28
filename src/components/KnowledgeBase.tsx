@@ -271,17 +271,21 @@ export default function KnowledgeBase({ projekt }: { projekt: string }) {
           placeholder="Hledat soubor..."
           className="w-full px-3 py-1.5 text-sm bg-gray-900 border border-gray-700 rounded-lg text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-500"
         />
-        {(indexStatus?.needs_reindex || reindexing) && (
-          <button
-            onClick={handleReindex}
-            disabled={reindexing}
-            className="w-full px-3 py-1.5 text-xs rounded-lg transition-colors disabled:opacity-60 bg-orange-900 hover:bg-orange-800 text-orange-200 border border-orange-700"
-          >
-            {reindexing
-              ? "Indexuji..."
-              : `Reindexovat (${indexStatus?.changed_files} změn)`}
-          </button>
-        )}
+        <button
+          onClick={handleReindex}
+          disabled={reindexing}
+          className={`w-full px-3 py-1.5 text-xs rounded-lg transition-colors disabled:opacity-60 ${
+            indexStatus?.needs_reindex
+              ? "bg-orange-900 hover:bg-orange-800 text-orange-200 border border-orange-700"
+              : "bg-gray-900 hover:bg-gray-800 text-gray-600 hover:text-gray-400 border border-gray-800"
+          }`}
+        >
+          {reindexing
+            ? "Indexuji..."
+            : indexStatus?.needs_reindex
+            ? `Reindexovat (${indexStatus.changed_files} změn)`
+            : "Reindexovat KB"}
+        </button>
         <div className="space-y-4 overflow-y-auto">
           {Object.entries(grouped).map(([kat, files]) => (
             <div key={kat}>

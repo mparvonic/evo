@@ -9,7 +9,8 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 type SourceItem = {
   url: string;
   label?: string;
-  mode?: string;
+  type?: string;
+  notes?: string;
   digest?: string;
 };
 
@@ -158,8 +159,8 @@ export default function SourcesPage() {
                       <p className="text-xs font-mono text-gray-300 truncate">{item.url}</p>
                       {item.label && <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>}
                     </div>
-                    {item.mode && (
-                      <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded flex-shrink-0">{item.mode}</span>
+                    {item.type && (
+                      <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded flex-shrink-0">{item.type}</span>
                     )}
                   </div>
                 ))}

@@ -23,7 +23,7 @@ type Task = {
   task_id: string;
   zadani?: string;
   phase_context?: { current_phase?: string };
-  updated_at?: string;
+  updated_at?: number;
   created_at?: string;
 };
 
