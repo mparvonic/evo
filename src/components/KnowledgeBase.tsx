@@ -213,6 +213,26 @@ export default function KnowledgeBase({ projekt }: { projekt: string }) {
     mutate();
   }, [diffData, selected, handleSave, mutate]);
 
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = useCallback(async () => {
+    if (!selected) return;
+    if (!confirm(`Smazat soubor ${selected}? Tato akce je nevratná.`)) return;
+    setDeleting(true);
+    const r = await fetch(
+      `/api/projects/${projekt}/knowledge/file?path=${encodeURIComponent(selected)}`,
+      { method: "DELETE" }
+    );
+    setDeleting(false);
+    if (r.ok) {
+      setSelected(null);
+      mutate();
+    } else {
+      const err = await r.json().catch(() => ({}));
+      alert(err.detail ?? "Smazání selhalo");
+    }
+  }, [selected, projekt, mutate]);
+
   const handleReindex = useCallback(async () => {
     setReindexing(true);
     await fetch(`/api/projects/${projekt}/knowledge/reindex`, { method: "POST" });
@@ -325,12 +345,21 @@ export default function KnowledgeBase({ projekt }: { projekt: string }) {
                     ✕ Zavřít diff
                   </button>
                 ) : !readOnly ? (
-                  <button
-                    onClick={handleEdit}
-                    className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 border border-gray-700 rounded-lg"
-                  >
-                    Upravit
-                  </button>
+                  <>
+                    <button
+                      onClick={handleDelete}
+                      disabled={deleting}
+                      className="text-xs text-red-800 hover:text-red-400 disabled:opacity-50 px-2 py-1 border border-red-900 hover:border-red-700 rounded-lg transition-colors"
+                    >
+                      {deleting ? "Mažu..." : "Smazat"}
+                    </button>
+                    <button
+                      onClick={handleEdit}
+                      className="text-xs text-gray-500 hover:text-gray-300 px-2 py-1 border border-gray-700 rounded-lg"
+                    >
+                      Upravit
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>
