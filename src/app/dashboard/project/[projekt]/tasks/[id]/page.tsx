@@ -15,11 +15,13 @@ type PhaseContext = {
   error?: string;
 };
 
+type TaskFile = { name: string; size: number; mtime: number };
+
 type TaskDetail = {
   task_id: string;
   task_yaml?: Record<string, unknown>;
   phase_context?: PhaseContext;
-  files?: string[];
+  files?: TaskFile[];
 };
 
 const PHASES = [
@@ -167,7 +169,10 @@ export default function TaskDetailPage() {
           <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Soubory workspace</p>
           <div className="space-y-1">
             {task.files.map((f) => (
-              <p key={f} className="text-xs text-gray-400 font-mono">{f}</p>
+              <div key={f.name} className="flex items-center justify-between gap-4">
+                <p className="text-xs text-gray-400 font-mono truncate">{f.name}</p>
+                <p className="text-xs text-gray-600 flex-shrink-0">{(f.size / 1024).toFixed(1)} kB</p>
+              </div>
             ))}
           </div>
         </div>
