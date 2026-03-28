@@ -135,7 +135,7 @@ function TaskRow({ task, projekt }: { task: Task; projekt: string }) {
       <span className={`text-xs px-2 py-0.5 rounded font-mono flex-shrink-0 ${color}`}>{phase}</span>
       {isWaiting && <span className="text-xs text-yellow-500 flex-shrink-0">⏳ čeká na schválení</span>}
       <span className="text-sm text-gray-300 truncate group-hover:text-white flex-1">
-        {task.zadani ?? task.task_id}
+        {task.zadani || task.task_id}
       </span>
       <span className="text-xs text-gray-700 font-mono flex-shrink-0">{task.task_id.slice(0, 8)}</span>
       {task.updated_at && (
