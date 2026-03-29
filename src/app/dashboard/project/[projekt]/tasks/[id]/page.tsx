@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -15,6 +15,7 @@ type PhaseContext = {
   error?: string;
   completed_phases?: string[];
   phase_results?: Record<string, Record<string, unknown>>;
+  artifacts?: Record<string, string>;
   errors?: string[];
 };
 
@@ -25,6 +26,25 @@ type TaskDetail = {
   task_yaml?: Record<string, unknown>;
   phase_context?: PhaseContext;
   files?: TaskFile[];
+};
+
+type OutputFile = { name: string; size: number; modified: number };
+
+type OutputContent = { name: string; content: string };
+
+type TaskEvent = {
+  timestamp?: string | null;
+  type: string;
+  title?: string;
+  phase?: string;
+  step_id?: string;
+  level?: string;
+  payload?: Record<string, unknown>;
+};
+
+type TaskEvents = {
+  task_id: string;
+  events: TaskEvent[];
 };
 
 const PHASE_COLOR: Record<string, string> = {
@@ -56,6 +76,13 @@ function phaseColor(p: string): string {
     return STEP_COLORS[i % STEP_COLORS.length];
   }
   return PHASE_COLOR[p] ?? "bg-gray-800 text-gray-400";
+}
+
+function formatDateTime(value?: string | number | null): string {
+  if (!value) return "n/a";
+  const date = typeof value === "number" ? new Date(value * 1000) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "n/a";
+  return date.toLocaleString("cs-CZ");
 }
 
 /** Builds ordered phase list from what we know: completed + current + planned steps */
@@ -120,6 +147,16 @@ export default function TaskDetailPage() {
     fetcher,
     { refreshInterval: 3000 }
   );
+  const { data: outputs } = useSWR<OutputFile[]>(
+    `/api/projects/${projekt}/outputs`,
+    fetcher,
+    { refreshInterval: 10000 }
+  );
+  const { data: taskEvents } = useSWR<TaskEvents>(
+    `/api/projects/${projekt}/tasks/${id}/events?limit=400`,
+    fetcher,
+    { refreshInterval: 3000 }
+  );
 
   const phase = pc?.current_phase ?? task?.phase_context?.current_phase ?? "?";
   const isApprove = phase === "APPROVE";
@@ -139,9 +176,26 @@ export default function TaskDetailPage() {
   const mergedPc = pc ?? task?.phase_context;
   const phases = buildPhases(mergedPc);
   const zadani = getZadani(task, mergedPc);
+  const relatedOutputs = (outputs ?? []).filter((file) => file.name.startsWith(`${id}_`));
+  const [selectedOutput, setSelectedOutput] = useState<string | null>(null);
+  const { data: selectedOutputData } = useSWR<OutputContent>(
+    selectedOutput ? `/api/projects/${projekt}/outputs/file?name=${encodeURIComponent(selectedOutput)}` : null,
+    fetcher
+  );
+  const events = taskEvents?.events ?? [];
 
   const nKroky = (mergedPc?.phase_results?.PLAN as { kroky?: number } | undefined)?.kroky ?? 0;
   const currentStep = phase.startsWith("STEP_") ? parseInt(phase.split("_")[1]) : null;
+
+  useEffect(() => {
+    if (!relatedOutputs.length) {
+      setSelectedOutput(null);
+      return;
+    }
+    if (!selectedOutput || !relatedOutputs.some((file) => file.name === selectedOutput)) {
+      setSelectedOutput(relatedOutputs[0].name);
+    }
+  }, [relatedOutputs, selectedOutput]);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -254,17 +308,157 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      {/* Phase results */}
-      {pc?.phase_results && Object.keys(pc.phase_results).length > 0 && (
-        <details className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <summary className="px-4 py-3 text-xs text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-400">
-            Výsledky fází
-          </summary>
-          <pre className="px-4 pb-4 text-xs text-gray-400 font-mono overflow-x-auto whitespace-pre-wrap">
-            {JSON.stringify(pc.phase_results, null, 2)}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Timeline fází</p>
+        <div className="flex flex-wrap gap-2">
+          {phases.map((p) => {
+            const isDone = mergedPc?.completed_phases?.includes(p) ?? false;
+            const isActive = p === phase;
+            const color = phaseColor(p);
+            return (
+              <div
+                key={p}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono ${
+                  isActive
+                    ? `${color} ring-2 ring-offset-1 ring-offset-gray-900 ring-blue-500`
+                    : isDone
+                    ? "bg-gray-800 text-gray-500 opacity-60"
+                    : "bg-gray-900 text-gray-700 border border-gray-800"
+                }`}
+              >
+                {isDone && <span className="text-green-600">✓</span>}
+                {p}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Výsledky fází</p>
+        <div className="space-y-3">
+          {Object.entries(mergedPc?.phase_results ?? {}).length ? (
+            Object.entries(mergedPc?.phase_results ?? {}).map(([phaseName, result]) => (
+              <div key={phaseName} className="bg-gray-950 border border-gray-800 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-gray-200">{phaseName}</p>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${phaseColor(phaseName)}`}>
+                    {String((result as { status?: string })?.status ?? "ok")}
+                  </span>
+                </div>
+                <pre className="text-xs text-gray-400 whitespace-pre-wrap overflow-auto mt-2">
+                  {JSON.stringify(result, null, 2)}
+                </pre>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-gray-500">Bez phase results.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[320px,minmax(0,1fr)] gap-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Artefakty a výstupy</p>
+          <div className="space-y-2">
+            {relatedOutputs.length ? (
+              relatedOutputs.map((file) => (
+                <button
+                  key={file.name}
+                  onClick={() => setSelectedOutput(file.name)}
+                  className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                    selectedOutput === file.name
+                      ? "bg-gray-800 border-gray-700 text-white"
+                      : "bg-gray-950 border-gray-800 text-gray-400 hover:bg-gray-900"
+                  }`}
+                >
+                  <div className="font-medium text-sm truncate">{file.name}</div>
+                  <div className="text-[11px] text-gray-600 mt-1">{formatDateTime(file.modified)}</div>
+                </button>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">Pro tento task zatím nejsou uložené výstupy.</p>
+            )}
+          </div>
+
+          {!!mergedPc?.artifacts && Object.keys(mergedPc.artifacts).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-800">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Cesty z phase contextu</p>
+              <pre className="text-xs text-gray-400 whitespace-pre-wrap overflow-auto">
+                {JSON.stringify(mergedPc.artifacts, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Obsah vybraného výstupu</p>
+          {selectedOutputData ? (
+            <pre className="text-xs text-gray-300 whitespace-pre-wrap overflow-auto max-h-[40vh]">
+              {selectedOutputData.content}
+            </pre>
+          ) : (
+            <p className="text-sm text-gray-500">Vyber výstup vlevo.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Event trace</p>
+        <div className="space-y-3 max-h-[46vh] overflow-y-auto">
+          {events.length ? (
+            events.map((event, index) => (
+              <div key={`${event.timestamp || "event"}-${index}`} className="bg-gray-950 border border-gray-800 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-200">{event.title || event.type}</p>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {formatDateTime(event.timestamp)} · {event.type}
+                      {event.phase ? ` · ${event.phase}` : ""}
+                      {event.step_id ? ` · step ${event.step_id}` : ""}
+                    </p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full border border-gray-700 text-[10px] font-medium text-gray-300 flex-shrink-0">
+                    {event.level || "info"}
+                  </span>
+                </div>
+                {event.payload && Object.keys(event.payload).length > 0 && (
+                  <pre className="text-xs text-gray-400 whitespace-pre-wrap overflow-auto mt-3">
+                    {JSON.stringify(event.payload, null, 2)}
+                  </pre>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">Tento task zatím nemá uložený event trace.</p>
+              <p className="text-xs text-gray-600">
+                Pro starší běhy worker ještě nezapisoval `events.jsonl`. U nových běhů se zde objeví flow události, LLM kola a použití tools.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Chyby a varování</p>
+          {mergedPc?.errors?.length ? (
+            <pre className="text-xs text-red-200 whitespace-pre-wrap overflow-auto max-h-[24vh]">
+              {mergedPc.errors.join("\n")}
+            </pre>
+          ) : (
+            <p className="text-sm text-gray-500">Žádné chyby v phase contextu.</p>
+          )}
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Raw phase context</p>
+          <pre className="text-xs text-gray-400 whitespace-pre-wrap overflow-auto max-h-[24vh]">
+            {JSON.stringify(mergedPc ?? {}, null, 2)}
           </pre>
-        </details>
-      )}
+        </div>
+      </div>
 
       <button
         onClick={() => router.back()}
