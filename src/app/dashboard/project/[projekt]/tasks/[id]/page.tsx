@@ -85,6 +85,184 @@ function formatDateTime(value?: string | number | null): string {
   return date.toLocaleString("cs-CZ");
 }
 
+function formatPhaseLabel(phase?: string): string {
+  if (!phase) return "neznámá fáze";
+  if (phase.startsWith("STEP_")) {
+    return `krok ${phase.split("_")[1]}`;
+  }
+  return phase.toLowerCase();
+}
+
+function eventStatusTone(event?: TaskEvent, phase?: string): string {
+  const type = event?.type ?? "";
+  const level = event?.level ?? "";
+  if (["FAILED", "CANCELLED"].includes(phase ?? "")) return "border-red-800 bg-red-950/50 text-red-200";
+  if (["COMPLETE", "DONE"].includes(phase ?? "")) return "border-emerald-800 bg-emerald-950/40 text-emerald-200";
+  if (level === "error" || type.includes("failed") || type.includes("exception")) {
+    return "border-red-800 bg-red-950/50 text-red-200";
+  }
+  if (level === "warning" || type.includes("retry") || type.includes("blocked")) {
+    return "border-amber-800 bg-amber-950/40 text-amber-200";
+  }
+  if (type === "judge_result" || type === "output_normalized" || type === "step_started") {
+    return "border-cyan-800 bg-cyan-950/40 text-cyan-200";
+  }
+  return "border-blue-800 bg-blue-950/40 text-blue-200";
+}
+
+function describeEvent(event?: TaskEvent, phase?: string): string {
+  if (!event) {
+    if (["COMPLETE", "DONE"].includes(phase ?? "")) return "Task je dokončený.";
+    if (["FAILED", "CANCELLED"].includes(phase ?? "")) return "Task skončil chybou nebo byl zrušen.";
+    return "Čekám na první živou událost z workeru.";
+  }
+
+  const payload = event.payload ?? {};
+  const eventPhase = event.phase || phase;
+  const stepLabel = event.step_id ? `krok ${event.step_id}` : formatPhaseLabel(eventPhase);
+
+  switch (event.type) {
+    case "flow_started":
+      return "Flow bylo spuštěno a worker začal zpracování.";
+    case "plan_created":
+      return `Planner připravil ${String(payload.steps && Array.isArray(payload.steps) ? payload.steps.length : "?")} kroků.`;
+    case "step_started":
+      return `Právě běží ${stepLabel}.`;
+    case "agent_call_started":
+      return `Executor právě řeší ${stepLabel} a chystá nástroje.`;
+    case "llm_round_started":
+      return `Probíhá LLM kolo ${String(payload.round ?? "?")} pro ${stepLabel}.`;
+    case "tool_call":
+      return `Volá se nástroj ${String(payload.tool ?? "unknown")} v ${stepLabel}.`;
+    case "tool_result":
+      return `Doběhl nástroj ${String(payload.tool ?? "unknown")} v ${stepLabel}.`;
+    case "tool_call_blocked_duplicate":
+      return `Zastaven duplicitní tool call ${String(payload.tool ?? "unknown")} v ${stepLabel}.`;
+    case "tool_rounds_exhausted":
+      return `Vyčerpaly se tool rounds pro ${stepLabel}; čeká se na finální odpověď modelu.`;
+    case "step_output":
+      return `Executor vrátil výstup pro ${stepLabel}.`;
+    case "output_normalized":
+      return `Výstup ${stepLabel} byl úspěšně normalizován do cílového schématu.`;
+    case "output_normalization_failed":
+      return `Normalizace výstupu pro ${stepLabel} selhala.`;
+    case "schema_validation_failed":
+      return `Schema validace selhala v ${stepLabel}; běží opravný pokus.`;
+    case "runtime_validation_failed":
+      return `Runtime validace selhala v ${stepLabel}; výstup neprošel technickou kontrolou.`;
+    case "judge_result":
+      return payload.ok ? `Judge schválil ${stepLabel}.` : `Judge vrátil ${stepLabel} k opravě.`;
+    case "judge_result_overridden":
+      return `Původní verdict judge byl zneplatněn a ${stepLabel} se vrací do retry.`;
+    case "step_retry":
+      return `Probíhá retry pro ${stepLabel}: ${String(payload.duvod ?? "čeká se na nový pokus")}`;
+    case "step_exception":
+      return `V ${stepLabel} spadla výjimka: ${String(payload.error_type ?? "error")}.`;
+    case "artifact_created":
+      return "Finální výstup byl uložen do workspace.";
+    case "flow_completed":
+      return "Flow bylo dokončeno.";
+    default:
+      return event.title || event.type;
+  }
+}
+
+type StatusSummary = {
+  previous: { label: string; meta: string };
+  current: { label: string; meta: string };
+  next: { label: string; meta: string };
+};
+
+function isCompletionEvent(event: TaskEvent): boolean {
+  return [
+    "tool_result",
+    "step_output",
+    "output_normalized",
+    "judge_result",
+    "artifact_created",
+    "flow_completed",
+  ].includes(event.type);
+}
+
+function predictNextActivity(event?: TaskEvent, phase?: string): string {
+  if (!event) {
+    if (["COMPLETE", "DONE"].includes(phase ?? "")) return "Žádná další aktivita, task je hotový.";
+    return "Čeká se na první akci workeru.";
+  }
+
+  const payload = event.payload ?? {};
+  switch (event.type) {
+    case "flow_started":
+      return "Očekává se plánování kroků.";
+    case "plan_created":
+      return "Očekává se spuštění prvního kroku.";
+    case "step_started":
+      return "Executor začne volat LLM nebo nástroje.";
+    case "agent_call_started":
+    case "llm_round_started":
+      return "Očekává se tool call nebo finální odpověď executoru.";
+    case "tool_call":
+      return `Čeká se na výsledek nástroje ${String(payload.tool ?? "unknown")}.`;
+    case "tool_result":
+      return "Model zpracuje výsledek nástroje a rozhodne o dalším kroku.";
+    case "tool_call_blocked_duplicate":
+      return "Model by měl použít předchozí výsledek nebo zvolit jiný nástroj.";
+    case "tool_rounds_exhausted":
+      return "Očekává se finální odpověď executoru bez dalších tools.";
+    case "step_output":
+      return "Proběhne validace výstupu nebo judge.";
+    case "output_normalized":
+      return "Proběhne schema validace a judge.";
+    case "output_normalization_failed":
+    case "schema_validation_failed":
+    case "runtime_validation_failed":
+      return "Očekává se retry stejného kroku s přísnějším kontraktem.";
+    case "judge_result":
+      return payload.ok ? "Pokud nejsou další kroky, task se uzavře. Jinak se spustí další krok." : "Krok se vrátí do retry.";
+    case "judge_result_overridden":
+    case "step_retry":
+      return "Executor zkusí krok znovu.";
+    case "artifact_created":
+      return "Očekává se uzavření flow.";
+    case "flow_completed":
+      return "Žádná další aktivita, flow je dokončeno.";
+    default:
+      return ["COMPLETE", "DONE"].includes(phase ?? "") ? "Žádná další aktivita, task je hotový." : "Čeká se na další event.";
+  }
+}
+
+function buildStatusSummary(events: TaskEvent[], phase?: string, updatedAt?: string): StatusSummary {
+  const latestEvent = events.length ? events[events.length - 1] : undefined;
+  const previousEvent = [...events].reverse().find((event) => isCompletionEvent(event) && event !== latestEvent);
+
+  const previous = previousEvent
+    ? {
+        label: describeEvent(previousEvent, phase),
+        meta: `${formatDateTime(previousEvent.timestamp)}${previousEvent.phase ? ` · ${previousEvent.phase}` : ""}${previousEvent.step_id ? ` · step ${previousEvent.step_id}` : ""}`,
+      }
+    : {
+        label: "Zatím není evidovaná dokončená aktivita.",
+        meta: formatDateTime(updatedAt),
+      };
+
+  const current = latestEvent
+    ? {
+        label: describeEvent(latestEvent, phase),
+        meta: `${formatDateTime(latestEvent.timestamp)}${latestEvent.phase ? ` · ${latestEvent.phase}` : ""}${latestEvent.step_id ? ` · step ${latestEvent.step_id}` : ""}`,
+      }
+    : {
+        label: describeEvent(undefined, phase),
+        meta: `${formatDateTime(updatedAt)} · ${phase ?? "?"}`,
+      };
+
+  const next = {
+    label: predictNextActivity(latestEvent, phase),
+    meta: latestEvent?.phase || phase || "?",
+  };
+
+  return { previous, current, next };
+}
+
 /** Builds ordered phase list from what we know: completed + current + planned steps */
 function buildPhases(pc?: PhaseContext): string[] {
   const completed = pc?.completed_phases ?? [];
@@ -183,6 +361,9 @@ export default function TaskDetailPage() {
     fetcher
   );
   const events = taskEvents?.events ?? [];
+  const latestEvent = events.length ? events[events.length - 1] : undefined;
+  const statusTone = eventStatusTone(latestEvent, phase);
+  const statusSummary = buildStatusSummary(events, phase, mergedPc?.updated_at);
 
   const nKroky = (mergedPc?.phase_results?.PLAN as { kroky?: number } | undefined)?.kroky ?? 0;
   const currentStep = phase.startsWith("STEP_") ? parseInt(phase.split("_")[1]) : null;
@@ -204,6 +385,27 @@ export default function TaskDetailPage() {
         <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Zadání</p>
         <p className="text-base text-gray-200">{zadani || id}</p>
         <p className="text-xs text-gray-600 mt-1 font-mono">{id}</p>
+      </div>
+
+      <div className={`border rounded-xl p-4 ${statusTone}`}>
+        <p className="text-xs uppercase tracking-wider opacity-75 mb-3">Live Stav</p>
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider opacity-60">Poslední dokončená</p>
+            <p className="text-sm mt-1">{statusSummary.previous.label}</p>
+            <p className="text-[11px] font-mono opacity-70 mt-1">{statusSummary.previous.meta}</p>
+          </div>
+          <div className="border-t border-white/10 pt-3">
+            <p className="text-[11px] uppercase tracking-wider opacity-60">Probíhající</p>
+            <p className="text-sm mt-1">{statusSummary.current.label}</p>
+            <p className="text-[11px] font-mono opacity-70 mt-1">{statusSummary.current.meta}</p>
+          </div>
+          <div className="border-t border-white/10 pt-3">
+            <p className="text-[11px] uppercase tracking-wider opacity-60">Další očekávaná</p>
+            <p className="text-sm mt-1">{statusSummary.next.label}</p>
+            <p className="text-[11px] font-mono opacity-70 mt-1">{statusSummary.next.meta}</p>
+          </div>
+        </div>
       </div>
 
       {/* State machine vizualizace */}
