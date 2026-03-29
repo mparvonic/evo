@@ -2,14 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // V produkci /api/* přebírá Apache a přesměrovává na EVO-X2.
-  // Pro lokální vývoj: EVO_API_URL=http://10.10.0.2:8000 npm run dev
+  // Když je nastaveno EVO_API_URL, Next proxyuje backend API i v produkci.
+  // To umožní provoz dashboardu přímo na EVO bez externí reverse proxy.
   async rewrites() {
-    if (process.env.NODE_ENV === "production") return [];
+    if (!process.env.EVO_API_URL) return [];
+
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.EVO_API_URL || "http://10.10.0.2:8000"}/api/:path*`,
+        destination: `${process.env.EVO_API_URL}/api/:path*`,
       },
     ];
   },

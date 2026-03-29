@@ -5,6 +5,7 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "miroslav@parvonic.cz";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
